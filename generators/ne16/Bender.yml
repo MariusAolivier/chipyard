@@ -1,0 +1,7 @@
+package:
+  name: chipyard_ne16
+  authors:
+    - "Chipyard NE16 integration contributors"
+
+dependencies:
+  ne16: { path: "upstream" }
