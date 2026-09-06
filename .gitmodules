@@ -169,3 +169,6 @@
 [submodule "generators/ne16/upstream"]
 	path = generators/ne16/upstream
 	url = https://github.com/pulp-platform/ne16.git
+[submodule "generators/ne16/pulp-nnx"]
+	path = generators/ne16/pulp-nnx
+	url = https://github.com/pulp-platform/pulp-nnx.git

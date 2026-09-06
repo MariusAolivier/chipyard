@@ -1,0 +1,16 @@
+overrides:
+  common_verification:
+    git: "https://github.com/pulp-platform/common_verification.git"
+    rev: "b616c1a25aea3b76e32dcbed2ec87d057efdcffd"
+  hci:
+    git: "https://github.com/pulp-platform/hci.git"
+    rev: "dc245ab36b1037f3a61d6aa97a3b59b3756c4472"
+  hwpe-ctrl:
+    git: "https://github.com/pulp-platform/hwpe-ctrl.git"
+    rev: "0336a85f7515fbd50ffab1a3290812401ef321b6"
+  hwpe-stream:
+    git: "https://github.com/pulp-platform/hwpe-stream.git"
+    rev: "ddc154424187dff42a8fcec946c768ceb13f13de"
+  tech_cells_generic:
+    git: "https://github.com/pulp-platform/tech_cells_generic.git"
+    rev: "e6226a6f374eb88fed84d4989bb3f066cb470f33"

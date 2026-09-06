@@ -1,0 +1,8 @@
+--- hci_core_sink.sv
++++ hci_core_sink.sv
+@@ -142,2 +142,3 @@
+-      hwpe_stream_tcdm_fifo_store #(
+-        .FIFO_DEPTH ( TCDM_FIFO_DEPTH )
++      hci_core_fifo #(
++        .FIFO_DEPTH ( TCDM_FIFO_DEPTH ),
++        .DW         ( DATA_WIDTH       )
