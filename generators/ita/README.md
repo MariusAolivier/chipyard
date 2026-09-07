@@ -31,3 +31,29 @@ compute RTL. It queues two 64x64 linear operations without reset and checks all
 `rtl/ita_chipyard_wrapper.sv` flattens the native sixteen-lane, 1024-bit HCI
 memory path and HWPE control interface into packed vectors suitable for a
 Chisel BlackBox. The upstream submodule remains unchanged.
+
+## Chipyard simulation
+
+After sourcing Chipyard's `env.sh`, build the integrated Rocket simulator:
+
+```sh
+export BENDER=/path/to/pinned/bender
+scripts/build-chipyard-sim.sh
+```
+
+Chipyard and ITA depend on different common-cells versions that use the same
+SystemVerilog include path and macro names. `prepare-rtl.sh` rewrites generated
+copies of only ITA's register-macro consumers to a private include namespace.
+Neither dependency is modified.
+
+The integration maps ITA control registers at `0x10030000` and a 256 KiB
+uncached shared scratchpad at `0x20000000`.
+
+Run the Rocket bare-metal regression with:
+
+```sh
+scripts/run-chipyard-regression.sh
+```
+
+The regression queues two 64x64 linear operations without resetting ITA and
+checks all 8,192 output bytes against independently calculated software values.
