@@ -1,0 +1,4 @@
+.venv/
+.verilator-env/
+.tools/
+build-verilator/
