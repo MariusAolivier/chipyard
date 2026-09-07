@@ -41,3 +41,24 @@ width-parameterized FIFO. The pinned upstream repositories remain untouched.
 control interfaces as packed vectors suitable for a Chisel BlackBox. It keeps
 HWPE's native 16-bit transaction ID internally and ties it to zero because the
 Chipyard bridge allows only one outstanding control request.
+
+## Chipyard simulation
+
+After sourcing Chipyard's `env.sh`, build the integrated Rocket simulator:
+
+```sh
+export BENDER=/path/to/pinned/bender
+scripts/build-chipyard-sim.sh
+```
+
+The integration maps NE16 control registers at `0x10030000` and a 64 KiB
+uncached shared scratchpad at `0x20000000`.
+
+Run the bare-metal regression with:
+
+```sh
+scripts/run-conv-test.sh
+```
+
+The regression queues two real 1x1 convolutions without resetting NE16 and
+checks every 32-bit output against a software reference.
