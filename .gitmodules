@@ -166,3 +166,6 @@
 [submodule "software/spec2026"]
 	path = software/spec2026
 	url = https://github.com/ucb-bar/spec2026-workload.git
+[submodule "generators/ita/upstream"]
+	path = generators/ita/upstream
+	url = https://github.com/pulp-platform/ITA.git
