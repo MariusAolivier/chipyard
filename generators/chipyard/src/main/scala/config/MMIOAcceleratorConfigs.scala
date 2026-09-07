@@ -13,6 +13,11 @@ class GCDTLRocketConfig extends Config(
   new chipyard.config.AbstractConfig)
 // DOC include end: GCDTLRocketConfig
 
+class NE16RocketConfig extends Config(
+  new chipyard.ne16.WithNE16 ++
+  new freechips.rocketchip.rocket.WithNHugeCores(1) ++
+  new chipyard.config.AbstractConfig)
+
 // DOC include start: GCDAXI4BlackBoxRocketConfig
 class GCDAXI4BlackBoxRocketConfig extends Config(
   new chipyard.example.WithGCD(useAXI4=true, useBlackBox=true) ++            // Use GCD blackboxed verilog, connect by AXI4->Tilelink
@@ -48,4 +53,3 @@ class StreamingFIRRocketConfig extends Config (
   new freechips.rocketchip.rocket.WithNHugeCores(1) ++
   new chipyard.config.AbstractConfig)
 // DOC include end: StreamingFIRRocketConfig
-
