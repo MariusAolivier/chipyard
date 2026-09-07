@@ -60,5 +60,6 @@ Run the bare-metal regression with:
 scripts/run-conv-test.sh
 ```
 
-The regression queues two real 1x1 convolutions without resetting NE16 and
-checks every 32-bit output against a software reference.
+The regression covers both 1x1 and 3x3 convolution. Each test queues two real
+operations without resetting NE16 and checks every 32-bit output against an
+independently computed software reference.
