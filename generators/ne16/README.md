@@ -36,3 +36,8 @@ scripts/standalone-lint.sh
 `hci_core_sink.sv`. HCI v1.0.6 incorrectly instantiates a legacy fixed-width
 HWPE FIFO on its 288-bit HCI path. The overlay selects HCI's own
 width-parameterized FIFO. The pinned upstream repositories remain untouched.
+
+`rtl/ne16_chipyard_wrapper.sv` exposes the upstream nine-lane TCDM and HWPE
+control interfaces as packed vectors suitable for a Chisel BlackBox. It keeps
+HWPE's native 16-bit transaction ID internally and ties it to zero because the
+Chipyard bridge allows only one outstanding control request.

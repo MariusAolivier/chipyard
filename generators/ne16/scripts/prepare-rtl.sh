@@ -30,5 +30,6 @@ cp "$original_sink" "$patched_sink"
 awk -v old="$original_sink" -v patched="$patched_sink" \
   '$0 == old { print patched; next } { print }' \
   "$raw_manifest" > "$manifest"
+printf '%s\n' "$root/rtl/ne16_chipyard_wrapper.sv" >> "$manifest"
 
 printf '%s\n' "$manifest"

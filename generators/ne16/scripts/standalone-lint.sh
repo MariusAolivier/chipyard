@@ -7,7 +7,7 @@ manifest=$("$root/scripts/prepare-rtl.sh")
 verilator \
   --lint-only \
   --timing \
-  --top-module ne16_top_wrap \
+  --top-module NE16BlackBox \
   -Wall \
   -Wno-BLKANDNBLK \
   -Wno-fatal \
