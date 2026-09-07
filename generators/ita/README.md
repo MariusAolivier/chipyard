@@ -27,3 +27,7 @@ scripts/run-smoke-regression.sh
 The regression uses ITA's unmodified HWPE wrapper, control, streamers, and
 compute RTL. It queues two 64x64 linear operations without reset and checks all
 8,192 output bytes against independently calculated row sums.
+
+`rtl/ita_chipyard_wrapper.sv` flattens the native sixteen-lane, 1024-bit HCI
+memory path and HWPE control interface into packed vectors suitable for a
+Chisel BlackBox. The upstream submodule remains unchanged.
