@@ -37,6 +37,14 @@ scripts/standalone-lint.sh
 HWPE FIFO on its 288-bit HCI path. The overlay selects HCI's own
 width-parameterized FIFO. The pinned upstream repositories remain untouched.
 
+This FIFO overlay is separate from `common_cells` namespace issues that can
+occur when unrelated PULP and Chipyard RTL dependency graphs are compiled
+together. The FIFO patch fixes an HCI interface-width incompatibility; it does
+not resolve duplicate `common_cells` modules or macros. This standalone NE16
+flow does not apply a `common_cells` namespace overlay, so such collisions
+must be handled separately if additional external RTL is added to the
+simulator.
+
 `rtl/ne16_chipyard_wrapper.sv` exposes the upstream nine-lane TCDM and HWPE
 control interfaces as packed vectors suitable for a Chisel BlackBox. It keeps
 HWPE's native 16-bit transaction ID internally and ties it to zero because the
