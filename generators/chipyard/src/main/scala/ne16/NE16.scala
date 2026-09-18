@@ -150,7 +150,17 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
 
       val words = params.scratchpadBytes / 4
       val wordIndexBits = log2Ceil(words)
-      val memory = Mem(words, Vec(4, UInt(8.W)))
+      val bankCount = 9
+      val bankIndexBits = log2Ceil(bankCount)
+      val rowsPerBank = (words + bankCount - 1) / bankCount
+      val rowIndexBits = log2Ceil(rowsPerBank)
+      val memory = Seq.fill(bankCount) {
+        SyncReadMem(rowsPerBank, Vec(4, UInt(8.W)))
+      }
+
+      def bankIndex(wordIndex: UInt): UInt = wordIndex % bankCount.U
+      def rowIndex(wordIndex: UInt): UInt = wordIndex / bankCount.U
+
       val (scratchpad, scratchpadEdge) = scratchpadNode.in.head
       val scratchpadOffset =
         scratchpad.a.bits.address - params.scratchpadAddress.U
@@ -160,25 +170,33 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         scratchpad.a.bits.data.asTypeOf(Vec(beatBytes, UInt(8.W)))
       val scratchpadHasData = scratchpadEdge.hasData(scratchpad.a.bits)
 
-      def readWord(index: UInt): UInt = Cat(memory(index).reverse)
+      val scratchpadReadPending = RegInit(false.B)
+      val scratchpadReadRequest =
+        RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
+      val scratchpadReadBank0 = RegInit(0.U(bankIndexBits.W))
+      val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
 
-      scratchpad.a.ready := scratchpad.d.ready && !accelerator.io.busy_o
-      scratchpad.d.valid := scratchpad.a.valid && !accelerator.io.busy_o
-      scratchpad.d.bits := scratchpadEdge.AccessAck(scratchpad.a.bits)
+      val scratchpadReady =
+        !accelerator.io.busy_o && !scratchpadReadPending && scratchpad.d.ready
+      val scratchpadFire = scratchpad.a.valid && scratchpadReady
+      val scratchpadReadFire = scratchpadFire && !scratchpadHasData
+      val scratchpadWriteFire = scratchpadFire && scratchpadHasData
+
+      scratchpad.a.ready := scratchpadReady
+      scratchpad.d.valid := scratchpadReadPending || scratchpadWriteFire
+      scratchpad.d.bits := scratchpadEdge.AccessAck(
+        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpad.a.bits))
       scratchpad.d.bits.opcode :=
-        Mux(scratchpadHasData, TLMessages.AccessAck, TLMessages.AccessAckData)
-      scratchpad.d.bits.data :=
-        Cat(readWord(beatWordIndex + 1.U), readWord(beatWordIndex))
+        Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
 
-      when(scratchpad.a.fire && scratchpadHasData) {
-        memory.write(
-          beatWordIndex,
-          VecInit(scratchpadWriteData.take(4)),
-          scratchpad.a.bits.mask(3, 0).asBools)
-        memory.write(
-          beatWordIndex + 1.U,
-          VecInit(scratchpadWriteData.drop(4)),
-          scratchpad.a.bits.mask(7, 4).asBools)
+      when(scratchpadReadFire) {
+        scratchpadReadPending := true.B
+        scratchpadReadRequest := scratchpad.a.bits
+        scratchpadReadBank0 := bankIndex(beatWordIndex)
+        scratchpadReadBank1 := bankIndex(beatWordIndex + 1.U)
+      }
+      when(scratchpadReadPending && scratchpad.d.fire) {
+        scratchpadReadPending := false.B
       }
 
       scratchpad.b.valid := false.B
@@ -189,26 +207,62 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val tcdmRead = accelerator.io.tcdm_wen_o(0)
       val tcdmReadData = Wire(Vec(9, UInt(32.W)))
       val tcdmWordIndices = Wire(Vec(9, UInt(wordIndexBits.W)))
+      val tcdmAccepted =
+        tcdmRequest && !scratchpadFire && !scratchpadReadPending
+
+      val bankReadEnable = Wire(Vec(bankCount, Bool()))
+      val bankReadRow = Wire(Vec(bankCount, UInt(rowIndexBits.W)))
+      val bankReadData = Wire(Vec(bankCount, Vec(4, UInt(8.W))))
+      val bankReadWords = Wire(Vec(bankCount, UInt(32.W)))
+
+      for (bank <- 0 until bankCount) {
+        bankReadEnable(bank) := false.B
+        bankReadRow(bank) := 0.U
+
+        when(scratchpadReadFire && bankIndex(beatWordIndex) === bank.U) {
+          bankReadEnable(bank) := true.B
+          bankReadRow(bank) := rowIndex(beatWordIndex)
+        }
+        when(scratchpadReadFire && bankIndex(beatWordIndex + 1.U) === bank.U) {
+          bankReadEnable(bank) := true.B
+          bankReadRow(bank) := rowIndex(beatWordIndex + 1.U)
+        }
+
+        for (lane <- 0 until 9) {
+          when(tcdmAccepted && tcdmRead &&
+              bankIndex(tcdmWordIndices(lane)) === bank.U) {
+            bankReadEnable(bank) := true.B
+            bankReadRow(bank) := rowIndex(tcdmWordIndices(lane))
+          }
+        }
+
+        bankReadData(bank) := memory(bank).read(
+          bankReadRow(bank),
+          bankReadEnable(bank))
+        bankReadWords(bank) := Cat(bankReadData(bank).reverse)
+      }
+
+      val scratchpadReadData0 = bankReadWords(scratchpadReadBank0)
+      val scratchpadReadData1 = bankReadWords(scratchpadReadBank1)
+      scratchpad.d.bits.data := Mux(
+        scratchpadReadPending,
+        Cat(scratchpadReadData1, scratchpadReadData0),
+        0.U((beatBytes * 8).W))
 
       for (lane <- 0 until 9) {
         val address = accelerator.io.tcdm_add_o(32 * (lane + 1) - 1, 32 * lane)
         val offset = address - params.scratchpadAddress.U
         tcdmWordIndices(lane) :=
           offset(log2Ceil(params.scratchpadBytes) - 1, 2)
-        tcdmReadData(lane) := readWord(tcdmWordIndices(lane))
+        tcdmReadData(lane) := bankReadWords(bankIndex(tcdmWordIndices(lane)))
 
         when(tcdmRequest) {
           assert(address >= params.scratchpadAddress.U)
           assert(address < (params.scratchpadAddress + params.scratchpadBytes).U)
         }
 
-        when(tcdmRequest && !tcdmRead) {
-          val data =
-            accelerator.io.tcdm_data_o(32 * (lane + 1) - 1, 32 * lane)
-          val bytes = data.asTypeOf(Vec(4, UInt(8.W)))
-          val mask =
-            accelerator.io.tcdm_be_o(4 * (lane + 1) - 1, 4 * lane)
-          memory.write(tcdmWordIndices(lane), bytes, mask.asBools)
+        when(tcdmAccepted) {
+          assert(tcdmWordIndices(lane) === tcdmWordIndices(0) + lane.U)
         }
       }
 
@@ -217,14 +271,54 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         assert(accelerator.io.tcdm_wen_o === Fill(9, tcdmRead))
       }
 
-      val tcdmReadDataReg = Reg(Vec(9, UInt(32.W)))
-      when(tcdmRequest && tcdmRead) {
-        tcdmReadDataReg := tcdmReadData
-      }
-      val tcdmReadValid = RegNext(tcdmRequest && tcdmRead, false.B)
+      for (bank <- 0 until bankCount) {
+        val bankWriteEnable = WireDefault(false.B)
+        val bankWriteRow = WireDefault(0.U(rowIndexBits.W))
+        val bankWriteData =
+          WireDefault(VecInit(Seq.fill(4)(0.U(8.W))))
+        val bankWriteMask =
+          WireDefault(VecInit(Seq.fill(4)(false.B)))
 
-      accelerator.io.tcdm_gnt_i := Fill(9, true.B)
-      accelerator.io.tcdm_r_data_i := Cat(tcdmReadDataReg.reverse)
+        when(scratchpadWriteFire && bankIndex(beatWordIndex) === bank.U) {
+          bankWriteEnable := true.B
+          bankWriteRow := rowIndex(beatWordIndex)
+          bankWriteData := VecInit(scratchpadWriteData.take(4))
+          bankWriteMask := VecInit(scratchpad.a.bits.mask(3, 0).asBools)
+        }
+        when(scratchpadWriteFire && bankIndex(beatWordIndex + 1.U) === bank.U) {
+          bankWriteEnable := true.B
+          bankWriteRow := rowIndex(beatWordIndex + 1.U)
+          bankWriteData := VecInit(scratchpadWriteData.drop(4))
+          bankWriteMask := VecInit(scratchpad.a.bits.mask(7, 4).asBools)
+        }
+
+        for (lane <- 0 until 9) {
+          when(tcdmAccepted && !tcdmRead &&
+              bankIndex(tcdmWordIndices(lane)) === bank.U) {
+            bankWriteEnable := true.B
+            bankWriteRow := rowIndex(tcdmWordIndices(lane))
+            bankWriteData := accelerator.io.tcdm_data_o(
+              32 * (lane + 1) - 1,
+              32 * lane).asTypeOf(Vec(4, UInt(8.W)))
+            bankWriteMask := accelerator.io.tcdm_be_o(
+              4 * (lane + 1) - 1,
+              4 * lane).asBools
+          }
+        }
+
+        when(bankWriteEnable) {
+          memory(bank).write(
+            bankWriteRow,
+            bankWriteData,
+            bankWriteMask.toSeq)
+        }
+      }
+
+      val tcdmReadValid = RegNext(tcdmAccepted && tcdmRead, false.B)
+      accelerator.io.tcdm_gnt_i := Fill(
+        9,
+        !scratchpadFire && !scratchpadReadPending)
+      accelerator.io.tcdm_r_data_i := Cat(tcdmReadData.reverse)
       accelerator.io.tcdm_r_valid_i := Fill(9, tcdmReadValid)
     }
   }
