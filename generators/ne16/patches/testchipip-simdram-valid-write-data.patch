@@ -1,0 +1,18 @@
+diff --git a/src/main/resources/testchipip/csrc/SimDRAM.cc b/src/main/resources/testchipip/csrc/SimDRAM.cc
+index 76f6d5d..6ecb8d5 100644
+--- a/src/main/resources/testchipip/csrc/SimDRAM.cc
++++ b/src/main/resources/testchipip/csrc/SimDRAM.cc
+@@ -139,10 +139,11 @@ extern "C" void memory_tick(
+ {
+     mm_t *mm = (mm_t *) channel;
+ 
+-    int w_data_bytes = svSize(w_data, 1);
++    int w_data_bytes = w_valid ? svSize(w_data, 1) : 0;
+     unsigned char *w_data_arr = (unsigned char *) malloc(w_data_bytes * sizeof(char));
+     for (int i = 0; i < w_data_bytes; i++) {
+-        const unsigned char* elem_ptr = static_cast<const unsigned char*>(svGetArrElemPtr1(w_data, i));
++        const unsigned char* elem_ptr =
++            static_cast<const unsigned char*>(svGetArrElemPtr1(w_data, i));
+         assert(elem_ptr != nullptr);
+         w_data_arr[i] = *elem_ptr;
+     }
