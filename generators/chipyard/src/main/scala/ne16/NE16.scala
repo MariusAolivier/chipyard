@@ -314,11 +314,17 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         }
       }
 
-      val tcdmReadValid = RegNext(tcdmAccepted && tcdmRead, false.B)
+      val tcdmReadPending = RegNext(tcdmAccepted && tcdmRead, false.B)
+      val tcdmReadDataReg = Reg(Vec(9, UInt(32.W)))
+      val tcdmReadValid = RegInit(false.B)
+      when(tcdmReadPending) {
+        tcdmReadDataReg := tcdmReadData
+      }
+      tcdmReadValid := tcdmReadPending
       accelerator.io.tcdm_gnt_i := Fill(
         9,
         !scratchpadFire && !scratchpadReadPending)
-      accelerator.io.tcdm_r_data_i := Cat(tcdmReadData.reverse)
+      accelerator.io.tcdm_r_data_i := Cat(tcdmReadDataReg.reverse)
       accelerator.io.tcdm_r_valid_i := Fill(9, tcdmReadValid)
     }
   }
