@@ -214,6 +214,8 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val bankReadRow = Wire(Vec(bankCount, UInt(rowIndexBits.W)))
       val bankReadData = Wire(Vec(bankCount, Vec(4, UInt(8.W))))
       val bankReadWords = Wire(Vec(bankCount, UInt(32.W)))
+      val tcdmReadBanks =
+        RegInit(VecInit(Seq.fill(9)(0.U(bankIndexBits.W))))
 
       for (bank <- 0 until bankCount) {
         bankReadEnable(bank) := false.B
@@ -254,7 +256,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         val offset = address - params.scratchpadAddress.U
         tcdmWordIndices(lane) :=
           offset(log2Ceil(params.scratchpadBytes) - 1, 2)
-        tcdmReadData(lane) := bankReadWords(bankIndex(tcdmWordIndices(lane)))
+        tcdmReadData(lane) := bankReadWords(tcdmReadBanks(lane))
+
+        when(tcdmAccepted && tcdmRead) {
+          tcdmReadBanks(lane) := bankIndex(tcdmWordIndices(lane))
+        }
 
         when(tcdmRequest) {
           assert(address >= params.scratchpadAddress.U)
@@ -314,17 +320,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         }
       }
 
-      val tcdmReadPending = RegNext(tcdmAccepted && tcdmRead, false.B)
-      val tcdmReadDataReg = Reg(Vec(9, UInt(32.W)))
-      val tcdmReadValid = RegInit(false.B)
-      when(tcdmReadPending) {
-        tcdmReadDataReg := tcdmReadData
-      }
-      tcdmReadValid := tcdmReadPending
+      val tcdmReadValid = RegNext(tcdmAccepted && tcdmRead, false.B)
       accelerator.io.tcdm_gnt_i := Fill(
         9,
         !scratchpadFire && !scratchpadReadPending)
-      accelerator.io.tcdm_r_data_i := Cat(tcdmReadDataReg.reverse)
+      accelerator.io.tcdm_r_data_i := Cat(tcdmReadData.reverse)
       accelerator.io.tcdm_r_valid_i := Fill(9, tcdmReadValid)
     }
   }
