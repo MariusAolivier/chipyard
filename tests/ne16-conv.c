@@ -1,14 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
-
-#define NE16_CONTROL_BASE 0x10030000UL
-#define NE16_SCRATCH_BASE 0x20000000UL
-
-#define NE16_TRIGGER 0x00
-#define NE16_ACQUIRE 0x04
-#define NE16_STATUS 0x0c
-#define NE16_SOFT_CLEAR 0x14
-#define NE16_TASK_REGS 0x20
+#include "ne16_driver.h"
 
 #define INPUT0_OFFSET 0x0000
 #define INPUT1_OFFSET 0x0400
@@ -16,57 +8,14 @@
 #define OUTPUT0_OFFSET 0x2000
 #define OUTPUT1_OFFSET 0x3000
 
-static inline void write32(uintptr_t address, uint32_t value) {
-  *(volatile uint32_t *)address = value;
-}
-
-static inline uint32_t read32(uintptr_t address) {
-  return *(volatile uint32_t *)address;
-}
-
-static inline void memory_fence(void) {
-  __asm__ volatile("fence rw, rw" ::: "memory");
-}
-
 static int dispatch(uint32_t input, uint32_t weights, uint32_t output) {
-  uint32_t task[24] = {
-      weights,
-      input,
-      output,
-      0,
-      0,
-      0,
-      16,
-      48,
-      0,
-      32,
-      4,
-      12,
-      16,
-      16,
-      0,
-      0x00010010,
-      0x00030003,
-      0x00030003,
-      0x00010001,
-      0x00010001,
-      0,
-      0xffffff80,
-      0,
-      0x00408047,
-  };
-
-  uint32_t job = read32(NE16_CONTROL_BASE + NE16_ACQUIRE);
-  if (job >= 0x100) {
-    printf("NE16 acquire failed: 0x%x\n", job);
-    return 1;
-  }
-
-  for (int i = 0; i < 24; ++i) {
-    write32(NE16_CONTROL_BASE + NE16_TASK_REGS + 4 * i, task[i]);
-  }
-  write32(NE16_CONTROL_BASE + NE16_TRIGGER, 0);
-  return 0;
+  ne16_task_t task = {.words = {
+      weights, input, output, 0, 0, 0,
+      16, 48, 0, 32, 4, 12, 16, 16, 0,
+      0x00010010, 0x00030003, 0x00030003, 0x00010001,
+      0x00010001, 0, 0xffffff80, 0, 0x00408047,
+  }};
+  return ne16_submit(&task);
 }
 
 static int check_output(volatile const uint8_t *input,
@@ -113,9 +62,9 @@ int main(void) {
     output0[i] = (int32_t)0xdeadbeef;
     output1[i] = (int32_t)0xdeadbeef;
   }
-  memory_fence();
+  ne16_memory_fence();
 
-  write32(NE16_CONTROL_BASE + NE16_SOFT_CLEAR, 0);
+  ne16_reset();
   if (dispatch(NE16_SCRATCH_BASE + INPUT0_OFFSET,
                NE16_SCRATCH_BASE + WEIGHTS_OFFSET,
                NE16_SCRATCH_BASE + OUTPUT0_OFFSET) ||
@@ -125,15 +74,10 @@ int main(void) {
     return 1;
   }
 
-  uint32_t timeout = 10000000;
-  while (read32(NE16_CONTROL_BASE + NE16_STATUS) != 0 && --timeout != 0) {
-  }
-  if (timeout == 0) {
-    printf("NE16 timed out with status 0x%x\n",
-           read32(NE16_CONTROL_BASE + NE16_STATUS));
+  if (ne16_wait_idle(10000000) != 0) {
+    printf("NE16 timed out\n");
     return 1;
   }
-  memory_fence();
 
   int errors = check_output(input0, output0, "operation 0");
   errors += check_output(input1, output1, "operation 1");
