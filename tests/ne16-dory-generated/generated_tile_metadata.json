@@ -1,0 +1,21 @@
+{
+  "layer_name": "BNReluConvolution0",
+  "tile_count": 1,
+  "dimensions": {
+    "input_height": 8,
+    "input_width": 8,
+    "input_channels": 16,
+    "output_height": 8,
+    "output_width": 8,
+    "output_channels": 16
+  },
+  "l1_requirement": 4544,
+  "padding_guard": 2048,
+  "guarded_l1_requirement": 6592,
+  "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
+  "config": "generators/ne16/config/config_single_layer0_ne16_chipyard.json",
+  "config_sha256": "11152bf8fb772a641cd9d271914ab681d29c140861588f3da14deb07b22c2152",
+  "input_sha256": "9c49227c43fad98010bd5a306e0f2e598026432b77d10a4d8375a3152403615d",
+  "weights_sha256": "8facd20beed76916cf5714af232bf06596a6fdaf1b29fc8d65a1ac183d8e6525",
+  "expected_sha256": "d9b61b2c04b7fa3250c96b7ba033c1fffa366727dfe29805491d11871979027b"
+}

@@ -87,6 +87,29 @@ add_executable(mt-hello mt-hello.c)
 add_executable(ne16-conv ne16-conv.c ne16_driver.c)
 add_executable(ne16-conv3x3 ne16-conv3x3.c ne16_driver.c)
 add_executable(ne16-dory-layer ne16-dory-layer.c ne16_driver.c ne16_dory_layer_data.c)
+add_executable(ne16-descriptor ne16-descriptor.c ne16_driver.c)
+add_executable(ne16-dma
+    ne16-dma.c
+    ne16_driver.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/dory_dma.c)
+target_include_directories(ne16-dma BEFORE PRIVATE
+    dory_ne16_compat
+    ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable(ne16-dory-generated-tile
+    ne16-dory-generated-tile.c
+    ne16_driver.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/pulp_nnx_util.c
+    dory_ne16_compat/dory_dma.c
+    ne16-dory-generated/src/BNReluConvolution0.c
+    ne16-dory-generated/dory_generated_tile_data.c)
+target_include_directories(ne16-dory-generated-tile BEFORE PRIVATE
+    dory_ne16_compat
+    ne16-dory-generated/inc
+    ne16-dory-generated
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(ne16-dory-generated-tile PRIVATE -include stdio.h)
 add_executable(symmetric symmetric.c)
 add_executable(ctc-test ctc-test.c)
 add_executable(multi-ctc-test multi-ctc-test.c)
@@ -132,6 +155,9 @@ add_dump_target(symmetric)
 add_dump_target(ctc-test)
 add_dump_target(multi-ctc-test)
 add_dump_target(triple-chiplet)
+add_dump_target(ne16-dory-generated-tile)
+add_dump_target(ne16-descriptor)
+add_dump_target(ne16-dma)
 
 
 # Add custom command to generate spiflash.img from spiflash.py
