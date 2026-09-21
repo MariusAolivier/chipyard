@@ -1,5 +1,5 @@
 diff --git a/src/main/resources/testchipip/csrc/SimDRAM.cc b/src/main/resources/testchipip/csrc/SimDRAM.cc
-index 76f6d5d..6ecb8d5 100644
+index 76f6d5d..434cbf8 100644
 --- a/src/main/resources/testchipip/csrc/SimDRAM.cc
 +++ b/src/main/resources/testchipip/csrc/SimDRAM.cc
 @@ -139,10 +139,11 @@ extern "C" void memory_tick(
@@ -7,7 +7,7 @@ index 76f6d5d..6ecb8d5 100644
      mm_t *mm = (mm_t *) channel;
  
 -    int w_data_bytes = svSize(w_data, 1);
-+    int w_data_bytes = w_valid ? svSize(w_data, 1) : 0;
++    int w_data_bytes = (w_valid && mm->w_ready()) ? svSize(w_data, 1) : 0;
      unsigned char *w_data_arr = (unsigned char *) malloc(w_data_bytes * sizeof(char));
      for (int i = 0; i < w_data_bytes; i++) {
 -        const unsigned char* elem_ptr = static_cast<const unsigned char*>(svGetArrElemPtr1(w_data, i));
@@ -16,3 +16,25 @@ index 76f6d5d..6ecb8d5 100644
          assert(elem_ptr != nullptr);
          w_data_arr[i] = *elem_ptr;
      }
+diff --git a/src/main/resources/testchipip/vsrc/SimDRAM.v b/src/main/resources/testchipip/vsrc/SimDRAM.v
+index fe80c5c..b8bdc06 100644
+--- a/src/main/resources/testchipip/vsrc/SimDRAM.v
++++ b/src/main/resources/testchipip/vsrc/SimDRAM.v
+@@ -116,7 +116,7 @@ module SimDRAM #(
+ 
+   wire __w_valid;
+   wire [31:0] __w_strb;
+-  byte        __w_data[(DATA_BITS / 8)-1:0];
++  byte        __w_data[0:(DATA_BITS / 8)-1];
+   wire        __w_last;
+ 
+   wire __r_ready;
+@@ -129,7 +129,7 @@ module SimDRAM #(
+   int __r_id;
+   int __r_resp;
+   // bit [DATA_BITS-1:0] __r_data;
+-  byte __r_data[(DATA_BITS / 8)-1:0];
++  byte __r_data[0:(DATA_BITS / 8)-1];
+   bit __r_last;
+   bit __b_valid;
+   int __b_id;
