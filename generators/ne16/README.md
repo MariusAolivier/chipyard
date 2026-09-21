@@ -61,8 +61,10 @@ scripts/build-chipyard-sim.sh
 
 The build script applies `patches/testchipip-simdram-valid-write-data.patch`
 to the checked-out `testchipip` submodule. This prevents its Verilator DRAM
-DPI shim from dereferencing an invalid AXI write-data array when `w_valid` is
-low.
+DPI shim from dereferencing an invalid AXI write-data array when the write
+handshake is not active. It also normalizes the generated fixed byte arrays
+because cached TestChipIP resources may otherwise retain the original
+descending-range declarations.
 
 The integration maps NE16 control registers at `0x10030000` and a 64 KiB
 uncached shared scratchpad at `0x20000000`.

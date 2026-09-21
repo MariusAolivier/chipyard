@@ -14,6 +14,20 @@ fi
 
 manifest=$("$ne16_root/scripts/prepare-rtl.sh")
 rtl_sources=$(grep -v '^[+]' "$manifest" | tr '\n' ' ')
+generated_dir="$chipyard_root/sims/verilator/generated-src/chipyard.harness.TestHarness.NE16RocketConfig/gen-collateral"
+
+if [ -f "$generated_dir/SimDRAM.v" ]; then
+  sed -i \
+    -e 's/byte        __w_data\[(DATA_BITS \/ 8)-1:0\];/byte        __w_data[0:(DATA_BITS \/ 8)-1];/' \
+    -e 's/byte __r_data\[(DATA_BITS \/ 8)-1:0\];/byte __r_data[0:(DATA_BITS \/ 8)-1];/' \
+    "$generated_dir/SimDRAM.v"
+fi
+
+if [ -f "$generated_dir/SimDRAM.cc" ]; then
+  sed -i \
+    -e 's/int w_data_bytes = svSize(w_data, 1);/int w_data_bytes = (w_valid \&\& mm->w_ready()) ? svSize(w_data, 1) : 0;/' \
+    "$generated_dir/SimDRAM.cc"
+fi
 
 cd "$chipyard_root/sims/verilator"
 make \
