@@ -276,15 +276,15 @@ def main():
             parser_params["code reserved space"] = config["code reserved space"]
             layer_raw = raw / f"layer{index}"
             layer_raw.mkdir()
-            if index:
+            for previous_index in range(index):
                 previous_output = (
                     raw
-                    / f"layer{index - 1}"
-                    / f"out_layer{index - 1}.txt"
+                    / f"layer{previous_index}"
+                    / f"out_layer{previous_index}.txt"
                 )
                 shutil.copy2(
                     previous_output,
-                    layer_raw / f"out_layer{index - 1}.txt",
+                    layer_raw / f"out_layer{previous_index}.txt",
                 )
             app_dir = layer_raw / "application"
             input_tensor = generate_layer(
