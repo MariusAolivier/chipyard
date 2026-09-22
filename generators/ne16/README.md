@@ -75,6 +75,37 @@ Run the bare-metal regression with:
 scripts/run-conv-test.sh
 ```
 
-The regression covers both 1x1 and 3x3 convolution. Each test queues two real
-operations without resetting NE16 and checks every 32-bit output against an
-independently computed software reference.
+The regression covers both 1x1 and 3x3 convolution, the original DORY-derived
+single-layer fixture, and the generated three-layer NE16 network. It runs the
+host-side importer rejection/reproducibility tests before building the
+firmware. Each generated layer also has a standalone target; the network test
+executes the generated entry points in order and checks both intermediate
+outputs and the final output.
+
+## Generating the three-layer fixture
+
+The checked-in network configuration is derived from
+`config/config_single_layer0_ne16_chipyard.json` and uses the pinned DORY
+commit recorded in `config/config_three_layer_ne16_chipyard.json`. It defines
+three fused, quantized 3x3 convolutions so every computational layer is
+eligible for the NE16 path. The Chipyard hardware description sets L1 to
+64 KiB and reserves no PULP core stacks; the importer additionally limits the
+guarded live allocation to 63,232 bytes.
+
+Generation must run on an allocated Idun node:
+
+```sh
+python3 generators/ne16/scripts/generate-dory-ne16-generated-network.py \
+  --dory-root /cluster/work/mariusao/dory \
+  --config generators/ne16/config/config_three_layer_ne16_chipyard.json \
+  --output-dir tests/ne16-dory-generated-network
+python3 generators/ne16/scripts/test-import-dory-ne16-generated-network.py
+```
+
+The generator copies DORY to a temporary directory, overlays
+`hardware_description_chipyard_ne16.json`, and never modifies the DORY
+checkout. It emits a manifest containing the source/config/parameter/reference
+hashes, layer order, dimensions, tile grids, and guarded L1 regions. The
+network importer rejects generic `pulp_nn_*` or cluster calls, missing NNX
+calls, reordered or truncated artifacts, invalid dimensions, and physical or
+guarded L1 overflows.

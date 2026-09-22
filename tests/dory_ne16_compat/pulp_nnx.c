@@ -27,7 +27,6 @@ void nnx_init(uint32_t max_stall) {
   (void)max_stall;
   active = 0;
   active_polls = 0;
-  ne16_reset();
 }
 
 void nnx_term(void) {

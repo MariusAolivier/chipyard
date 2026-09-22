@@ -110,6 +110,36 @@ target_include_directories(ne16-dory-generated-tile BEFORE PRIVATE
     ne16-dory-generated
     ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(ne16-dory-generated-tile PRIVATE -include stdio.h)
+set(DORY_NETWORK_SOURCES
+    ne16_driver.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/pulp_nnx_util.c
+    dory_ne16_compat/dory_dma.c
+    ne16-dory-generated-network/src/BNReluConvolution0.c
+    ne16-dory-generated-network/src/BNReluConvolution1.c
+    ne16-dory-generated-network/src/BNReluConvolution2.c
+    ne16-dory-generated-network/dory_generated_network_data.c)
+add_executable(ne16-dory-generated-network
+    ne16-dory-generated-network.c ${DORY_NETWORK_SOURCES})
+target_include_directories(ne16-dory-generated-network BEFORE PRIVATE
+    dory_ne16_compat
+    ne16-dory-generated-network/inc
+    ne16-dory-generated-network
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(ne16-dory-generated-network PRIVATE -include stdio.h)
+
+foreach(layer_index RANGE 0 2)
+    add_executable(ne16-dory-generated-layer${layer_index}
+        ne16-dory-generated-layer.c ${DORY_NETWORK_SOURCES})
+    target_include_directories(ne16-dory-generated-layer${layer_index} BEFORE PRIVATE
+        dory_ne16_compat
+        ne16-dory-generated-network/inc
+        ne16-dory-generated-network
+        ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(ne16-dory-generated-layer${layer_index}
+        PRIVATE DORY_LAYER_INDEX=${layer_index})
+    target_compile_options(ne16-dory-generated-layer${layer_index} PRIVATE -include stdio.h)
+endforeach()
 add_executable(symmetric symmetric.c)
 add_executable(ctc-test ctc-test.c)
 add_executable(multi-ctc-test multi-ctc-test.c)
@@ -156,6 +186,10 @@ add_dump_target(ctc-test)
 add_dump_target(multi-ctc-test)
 add_dump_target(triple-chiplet)
 add_dump_target(ne16-dory-generated-tile)
+add_dump_target(ne16-dory-generated-network)
+add_dump_target(ne16-dory-generated-layer0)
+add_dump_target(ne16-dory-generated-layer1)
+add_dump_target(ne16-dory-generated-layer2)
 add_dump_target(ne16-descriptor)
 add_dump_target(ne16-dma)
 

@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""Generate a deterministic all-NE16 DORY network without modifying DORY.
+
+The pinned DORY layer generator creates one layer at a time.  This wrapper
+reuses its graph, NE16 parser, and C parser in a temporary DORY checkout,
+feeding each generated layer's quantized output into the next layer.
+"""
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_hex(path):
+    data = path.read_bytes()
+    try:
+        text = data.decode("ascii")
+    except UnicodeDecodeError:
+        return data
+    values = re.findall(r"(?i)(?<![0-9a-f])[0-9a-f]{2}(?![0-9a-f])", text)
+    if not values:
+        raise ValueError(f"{path} does not contain byte-oriented hexadecimal data")
+    return bytes(int(value, 16) for value in values)
+
+
+def find_layer_source(app_dir, function_name):
+    candidates = []
+    for path in sorted((app_dir / "src").rglob("*.c")):
+        text = path.read_text(encoding="utf-8")
+        if re.search(rf"\bvoid\s+{re.escape(function_name)}\s*\(", text):
+            candidates.append((path, text))
+    if len(candidates) != 1:
+        raise ValueError(
+            f"expected one generated source for {function_name}, found "
+            f"{len(candidates)}"
+        )
+    return candidates[0]
+
+
+def find_function_name(source, preferred):
+    match = re.search(r"\bvoid\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*void\s*\*args\s*\)", source)
+    if match is None:
+        raise ValueError(f"could not identify generated layer entry point in {preferred}")
+    return match.group(1)
+
+
+def parse_tile_grid(source):
+    match = re.search(
+        r"\b(?:static\s+)?const\s+TileIndex\s+end_index\s*=\s*\{(.*?)\};",
+        source,
+        re.S,
+    )
+    if match is None:
+        raise ValueError("generated source does not declare end_index")
+    fields = dict(
+        (name, int(value))
+        for name, value in re.findall(
+            r"\.(height|width|output_channel)\s*=\s*(-?\d+)", match.group(1)
+        )
+    )
+    if set(fields) != {"height", "width", "output_channel"} or any(
+        value < 1 for value in fields.values()
+    ):
+        raise ValueError("generated source declares an invalid tile grid")
+    return [
+        fields["height"],
+        fields["width"],
+        fields["output_channel"],
+    ]
+
+
+def parse_l1_usage(source, live_limit):
+    usage = 0
+    for name in ("input", "output", "weights", "scale", "bias"):
+        base = re.search(
+            rf"l1_buffer_{name}\s*=\s*l1_buffer\s*\+\s*(\d+)",
+            source,
+        )
+        if base is None:
+            continue
+        usage = max(usage, int(base.group(1)))
+        double_buffer = re.search(
+            rf"=\s*l1_buffer_{name}\s*\+\s*(\d+)",
+            source,
+        )
+        if double_buffer is not None:
+            usage = max(usage, int(base.group(1)) + int(double_buffer.group(1)))
+    if usage == 0:
+        raise ValueError("could not find generated L1 offsets")
+    if usage <= 0 or usage > live_limit:
+        raise ValueError(f"generated L1 usage {usage} exceeds live limit {live_limit}")
+    return usage
+
+
+def copy_headers(app_dir, destination):
+    headers = {}
+    for path in sorted((app_dir / "inc").rglob("*.h")):
+        relative = path.relative_to(app_dir / "inc")
+        target = destination / "inc" / relative
+        data = path.read_bytes()
+        if relative in headers and headers[relative] != data:
+            raise ValueError(f"generated header differs between layers: {relative}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        headers[relative] = data
+    if not headers:
+        raise ValueError(f"generated application has no headers: {app_dir}")
+    return headers
+
+
+def record(path, root):
+    data = path.read_bytes()
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "size": len(data),
+        "sha256": sha256(data),
+    }
+
+
+def load_generator(dory_copy):
+    sys.path.insert(0, str(dory_copy))
+    path = dory_copy / "layer_generate_ne16.py"
+    spec = importlib.util.spec_from_file_location("chipyard_layer_generate_ne16", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def generate_layer(generator, params, layer_index, network_dir, app_dir, input_tensor):
+    layer_node = generator.create_layer_node(params, layer_index * 2)
+    dory_node = generator.create_dory_node(params, layer_index * 2 + 1)
+    output_tensor = generator.create_layer(
+        layer_index,
+        layer_node,
+        dory_node,
+        str(network_dir),
+        "PULP.GAP9_NE16",
+        input=input_tensor,
+    )
+    parser_module = importlib.import_module(
+        "dory.Hardware_targets.PULP.GAP9_NE16.HW_Parser"
+    )
+    graph = parser_module.onnx_manager(
+        [layer_node, dory_node],
+        params,
+        str(network_dir),
+    ).full_graph_parsing()
+    c_parser_module = importlib.import_module(
+        "dory.Hardware_targets.PULP.GAP9_NE16.C_Parser"
+    )
+    c_parser_module.C_Parser(
+        graph,
+        params,
+        str(network_dir),
+        "None",
+        "No",
+        "8bit",
+        str(app_dir),
+    ).full_graph_parsing()
+    return output_tensor
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dory-root", required=True, type=Path)
+    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--chipyard-root",
+        type=Path,
+        default=Path(__file__).resolve().parents[3],
+    )
+    args = parser.parse_args()
+
+    config_path = args.config.resolve()
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if config.get("hardware_target") != "PULP.GAP9_NE16":
+        raise ValueError("network config must target PULP.GAP9_NE16")
+    base_config = args.chipyard_root.resolve() / config["base_config"]
+    if sha256(base_config.read_bytes()) != config["base_config_sha256"]:
+        raise ValueError(f"pinned base config hash does not match {base_config}")
+    dory_root = args.dory_root.resolve()
+    output = args.output_dir.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    raw = output / "raw"
+    if raw.exists():
+        shutil.rmtree(raw)
+    raw.mkdir()
+    shutil.copy2(config_path, raw / "generation_config.json")
+    hardware_description = (
+        args.chipyard_root.resolve()
+        / config["hardware_description"]
+    )
+    dory_description = (
+        dory_root
+        / "dory"
+        / "Hardware_targets"
+        / "PULP"
+        / "GAP9_NE16"
+        / "HW_description.json"
+    )
+
+    with tempfile.TemporaryDirectory(prefix="dory-chipyard-") as temporary:
+        dory_copy = Path(temporary) / "dory"
+        shutil.copytree(dory_root, dory_copy, symlinks=True)
+        dory_description.unlink()
+        shutil.copy2(hardware_description, dory_description)
+        generator = load_generator(dory_copy)
+        import torch
+
+        torch.manual_seed(int(config.get("seed", 0)))
+        input_tensor = None
+        manifest_layers = []
+        shared_headers = {}
+        for index, params in enumerate(config["layers"]):
+            layer_raw = raw / f"layer{index}"
+            layer_raw.mkdir()
+            app_dir = layer_raw / "application"
+            input_tensor = generate_layer(
+                generator,
+                params,
+                index,
+                layer_raw,
+                app_dir,
+                input_tensor,
+            )
+            source_candidates = sorted((app_dir / "src").rglob("*.c"))
+            source_path = None
+            for candidate in source_candidates:
+                candidate_text = candidate.read_text(encoding="utf-8")
+                if re.search(
+                    r"\bvoid\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*void\s*\*args\s*\)",
+                    candidate_text,
+                ):
+                    source_path = candidate
+                    break
+            if source_path is None:
+                raise ValueError(f"layer {index} has no generated entry point")
+            source = source_path.read_text(encoding="utf-8")
+            function_name = find_function_name(source, source_path.name)
+            source = f"/* DORY_COMMIT: {config['dory_commit']} */\n" + source
+            source_path = layer_raw / f"{function_name}.c"
+            source_path.write_text(source, encoding="utf-8", newline="\n")
+            headers = copy_headers(app_dir, layer_raw)
+            shared_headers.update(headers)
+            input_hex = app_dir / "hex" / "inputs.hex"
+            weights_hex = app_dir / "hex" / f"{function_name}_weights.hex"
+            if not input_hex.exists() or not weights_hex.exists():
+                raise ValueError(f"layer {index} is missing generated hex data")
+            input_data = read_hex(input_hex)
+            parameter_data = read_hex(weights_hex)
+            reference_values = [
+                int(value)
+                for value in re.findall(
+                    r"-?\d+",
+                    (layer_raw / f"out_layer{index}.txt").read_text(
+                        encoding="utf-8"
+                    ),
+                )
+            ]
+            reference_data = bytes(value & 0xFF for value in reference_values)
+            layer_input = raw / f"layer{index}_input.bin"
+            layer_parameters = raw / f"layer{index}_parameters.bin"
+            layer_reference = raw / f"layer{index}_reference.bin"
+            layer_input.write_bytes(input_data)
+            layer_parameters.write_bytes(parameter_data)
+            layer_reference.write_bytes(reference_data)
+            dims = {
+                "input": [
+                    params["input_dimensions"][0],
+                    params["input_dimensions"][1],
+                    params["input_channels"],
+                ],
+                "output": [
+                    params["output_dimensions"][0],
+                    params["output_dimensions"][1],
+                    params["output_channels"],
+                ],
+                "input_width_bits": params["input_bits"],
+                "parameter_width_bits": params["weight_bits"],
+                "output_width_bits": params["output_bits"],
+            }
+            l1_usage = parse_l1_usage(
+                source, config["l1"]["live_limit_bytes"]
+            )
+            manifest_layers.append(
+                {
+                    "name": function_name,
+                    "order": index,
+                    "source": record(source_path, raw),
+                    "headers": [
+                        record(layer_raw / "inc" / path, raw)
+                        for path in sorted(headers)
+                    ],
+                    "dimensions": dims,
+                    "tile_grid": parse_tile_grid(source),
+                    "l1_regions": [
+                        {
+                            "name": "generated-live-l1",
+                            "offset": config["l1"]["padding_guard_bytes"],
+                            "size": l1_usage,
+                            "guard_before": config["l1"]["padding_guard_bytes"],
+                            "guard_after": config["l1"]["suffix_guard_bytes"],
+                        }
+                    ],
+                    "input": record(layer_input, raw),
+                    "parameters": record(layer_parameters, raw),
+                    "reference": record(layer_reference, raw),
+                }
+            )
+            # The next layer consumes the actual quantized output produced by
+            # the DORY reference calculation, not a freshly randomized tensor.
+            input_tensor = input_tensor.to(dtype=torch.int64)
+            if len(reference_data) != int(input_tensor.numel()):
+                raise ValueError(
+                    f"layer {index} reference size does not match generated output"
+                )
+
+        manifest = {
+            "schema_version": 1,
+            "engine": "ne16",
+            "dory": {
+                "repository": config["dory_repository"],
+                "commit": config["dory_commit"],
+            },
+            "config": {
+                "path": "generation_config.json",
+                "size": (raw / "generation_config.json").stat().st_size,
+                "sha256": sha256((raw / "generation_config.json").read_bytes()),
+            },
+            "l1": config["l1"],
+            "layers": manifest_layers,
+        }
+        (raw / "network_manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        importer = (
+            args.chipyard_root.resolve()
+            / "generators"
+            / "ne16"
+            / "scripts"
+            / "import-dory-ne16-generated-network.py"
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(importer),
+                "--manifest",
+                str(raw / "network_manifest.json"),
+                "--output-dir",
+                str(output),
+            ],
+            check=True,
+        )
+    print(f"Generated deterministic DORY NE16 network in {output}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,52 @@
+{
+  "name": "Chipyard/NE16",
+  "memory": {
+    "levels": 3,
+    "L1": {
+      "dimension": 65536,
+      "bandwidth": 32,
+      "latency": 1,
+      "frequency": 100000000
+    },
+    "L2": {
+      "dimension": 1536000,
+      "bandwidth": 8,
+      "latency": 10,
+      "frequency": 100000000
+    },
+    "L3": {
+      "dimension": 8000000,
+      "bandwidth": null,
+      "latency": null,
+      "frequency": null
+    },
+    "DMA": "yes",
+    "cache": "no"
+  },
+  "architecture": "single-core+accelerator",
+  "software development kit": {
+    "name": "chipyard-ne16-compat",
+    "directory": "tests/dory_ne16_compat"
+  },
+  "peak MAC/cycle": {
+    "8bits": 32,
+    "float32": null
+  },
+  "core frequency": 100000000,
+  "accelerator frequency": 100000000,
+  "peripheral frequency": 100000000,
+  "HW specific parameters": {
+    "accelerator core0 stack": 0,
+    "accelerator core1-7 stack": 0
+  },
+  "double_buffering": 2,
+  "split_ints": true,
+  "blocking_dma_transfers": true,
+  "single_core_dma": true,
+  "chipyard_ne16": {
+    "scratchpad_bytes": 65536,
+    "padding_guard_bytes": 2048,
+    "suffix_guard_bytes": 256,
+    "live_l1_limit_bytes": 63232
+  }
+}
