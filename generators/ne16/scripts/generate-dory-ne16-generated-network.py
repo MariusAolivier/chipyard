@@ -237,6 +237,28 @@ def main():
         )
         dory_description.unlink()
         shutil.copy2(hardware_description, dory_description)
+        gap9_templates = (
+            dory_copy
+            / "dory"
+            / "Hardware_targets"
+            / "PULP"
+            / "GAP9"
+            / "Templates"
+        )
+        compatibility_templates = (
+            dory_copy
+            / "dory"
+            / "Hardware_targets"
+            / "Chipyard"
+            / "NE16"
+            / "Templates"
+        )
+        if gap9_templates.exists():
+            shutil.copytree(
+                gap9_templates,
+                compatibility_templates,
+                dirs_exist_ok=True,
+            )
         generator = load_generator(dory_copy)
         import torch
 
