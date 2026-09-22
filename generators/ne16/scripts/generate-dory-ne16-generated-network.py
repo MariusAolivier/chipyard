@@ -227,11 +227,13 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="dory-chipyard-") as temporary:
         dory_copy = Path(temporary) / "dory"
+        dory_copy.mkdir()
+        shutil.copy2(dory_root / "layer_generate_ne16.py", dory_copy)
         shutil.copytree(
-            dory_root,
-            dory_copy,
+            dory_root / "dory",
+            dory_copy / "dory",
             symlinks=True,
-            ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"),
+            ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
         )
         dory_description.unlink()
         shutil.copy2(hardware_description, dory_description)
