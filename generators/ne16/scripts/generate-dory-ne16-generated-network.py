@@ -123,6 +123,64 @@ def copy_headers(app_dir, destination):
     return headers
 
 
+def adapt_single_core_source(source):
+    replacements = {
+        "#define EXECUTER_ID (1)": "#define EXECUTER_ID (0)",
+        "#define STORER_ID (2)": "#define STORER_ID (0)",
+        "pi_cl_team_fork(CORES, (void *)layer_task_fork, args);":
+        "layer_task_fork(args);",
+    }
+    for old, new in replacements.items():
+        if old not in source:
+            raise ValueError(f"generated source is missing expected text: {old}")
+        source = source.replace(old, new)
+    if "pi_cl_" in source:
+        raise ValueError("generated source still contains multi-core PULP calls")
+    return source
+
+
+def write_single_core_monitor_header(destination):
+    (destination / "inc" / "monitor.h").write_text(
+        """#ifndef CHIPYARD_DORY_MONITOR_H
+#define CHIPYARD_DORY_MONITOR_H
+
+typedef struct {
+    int unused;
+} Monitor;
+
+static inline int monitor_init(Monitor *monitor, int buffer_size) {
+    (void)monitor;
+    (void)buffer_size;
+    return 0;
+}
+
+static inline void monitor_term(Monitor monitor) {
+    (void)monitor;
+}
+
+static inline void monitor_produce_begin(Monitor monitor) {
+    (void)monitor;
+}
+
+static inline void monitor_produce_end(Monitor monitor) {
+    (void)monitor;
+}
+
+static inline void monitor_consume_begin(Monitor monitor) {
+    (void)monitor;
+}
+
+static inline void monitor_consume_end(Monitor monitor) {
+    (void)monitor;
+}
+
+#endif
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def record(path, root):
     data = path.read_bytes()
     return {
@@ -309,10 +367,13 @@ def main():
                 raise ValueError(f"layer {index} has no generated entry point")
             source = source_path.read_text(encoding="utf-8")
             function_name = find_function_name(source, source_path.name)
+            source = adapt_single_core_source(source)
             source = f"/* DORY_COMMIT: {config['dory_commit']} */\n" + source
             source_path = layer_raw / f"{function_name}.c"
             source_path.write_text(source, encoding="utf-8", newline="\n")
             headers = copy_headers(app_dir, layer_raw)
+            write_single_core_monitor_header(layer_raw)
+            headers["monitor.h"] = True
             shared_headers.update(headers)
             input_hex = app_dir / "hex" / "inputs.hex"
             weights_hex = app_dir / "hex" / f"{function_name}_weights.hex"
