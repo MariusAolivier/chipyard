@@ -103,6 +103,8 @@ static int run_layer(const char *name, generated_layer_fn function,
                      uint32_t weights_bytes, uint32_t output_bytes,
                      uint32_t expected_tiles, dory_ne16_stats_t *previous) {
   uint32_t input_ptr, weights_ptr, output_ptr;
+  printf("DORY generated network starting %s\n", name);
+  fflush(stdout);
   if (pointer32(input, &input_ptr) != 0 ||
       pointer32(weights, &weights_ptr) != 0 ||
       pointer32(output, &output_ptr) != 0) {
@@ -146,6 +148,8 @@ static int run_layer(const char *name, generated_layer_fn function,
       check_guards() != 0) {
     return -1;
   }
+  printf("DORY generated network finished %s\n", name);
+  fflush(stdout);
   *previous = current;
   return 0;
 }
