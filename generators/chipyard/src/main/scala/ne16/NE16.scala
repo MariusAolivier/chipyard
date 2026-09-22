@@ -177,7 +177,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
 
       val scratchpadReady =
-        !accelerator.io.busy_o && !scratchpadReadPending && scratchpad.d.ready
+        !scratchpadReadPending && scratchpad.d.ready
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
@@ -207,8 +207,9 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val tcdmRead = accelerator.io.tcdm_wen_o(0)
       val tcdmReadData = Wire(Vec(9, UInt(32.W)))
       val tcdmWordIndices = Wire(Vec(9, UInt(wordIndexBits.W)))
+      val tcdmGrant = !scratchpadFire && !scratchpadReadPending
       val tcdmAccepted =
-        tcdmRequest && !scratchpadFire && !scratchpadReadPending
+        tcdmRequest && tcdmGrant
 
       val bankReadEnable = Wire(Vec(bankCount, Bool()))
       val bankReadRow = Wire(Vec(bankCount, UInt(rowIndexBits.W)))
@@ -321,9 +322,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       }
 
       val tcdmReadValid = RegNext(tcdmAccepted && tcdmRead, false.B)
-      accelerator.io.tcdm_gnt_i := Fill(
-        9,
-        !scratchpadFire && !scratchpadReadPending)
+      accelerator.io.tcdm_gnt_i := Fill(9, tcdmGrant)
       accelerator.io.tcdm_r_data_i := Cat(tcdmReadData.reverse)
       accelerator.io.tcdm_r_valid_i := Fill(9, tcdmReadValid)
     }
