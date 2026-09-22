@@ -227,7 +227,12 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="dory-chipyard-") as temporary:
         dory_copy = Path(temporary) / "dory"
-        shutil.copytree(dory_root, dory_copy, symlinks=True)
+        shutil.copytree(
+            dory_root,
+            dory_copy,
+            symlinks=True,
+            ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"),
+        )
         dory_description.unlink()
         shutil.copy2(hardware_description, dory_description)
         generator = load_generator(dory_copy)
