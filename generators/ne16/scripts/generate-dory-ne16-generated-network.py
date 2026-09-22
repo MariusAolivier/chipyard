@@ -49,7 +49,11 @@ def find_layer_source(app_dir, function_name):
 
 
 def find_function_name(source, preferred):
-    match = re.search(r"\bvoid\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*void\s*\*args\s*\)", source)
+    match = re.search(
+        r"(?m)^\s*void\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
+        r"\(\s*void\s*\*args\s*\)",
+        source,
+    )
     if match is None:
         raise ValueError(f"could not identify generated layer entry point in {preferred}")
     return match.group(1)
