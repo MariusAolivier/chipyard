@@ -24,14 +24,9 @@ def sha256(data):
 
 def read_hex(path):
     data = path.read_bytes()
-    try:
-        text = data.decode("ascii")
-    except UnicodeDecodeError:
-        return data
-    values = re.findall(r"(?i)(?<![0-9a-f])[0-9a-f]{2}(?![0-9a-f])", text)
-    if not values:
-        raise ValueError(f"{path} does not contain byte-oriented hexadecimal data")
-    return bytes(int(value, 16) for value in values)
+    if not data:
+        raise ValueError(f"{path} is empty")
+    return data
 
 
 def find_layer_source(app_dir, function_name):
