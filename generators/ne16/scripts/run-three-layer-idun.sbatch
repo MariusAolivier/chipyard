@@ -29,7 +29,7 @@ if [[ -f /cluster/work/mariusao/chipyard/.conda-env/bin/activate ]]; then
   source /cluster/work/mariusao/chipyard/.conda-env/bin/activate
   export PATH=/cluster/work/mariusao/chipyard/.conda-env/riscv-tools/bin:$PATH
 fi
-source env.sh
+source /cluster/work/mariusao/chipyard/env.sh
 export XDG_RUNTIME_DIR=/tmp/${USER}-runtime-${SLURM_JOB_ID}
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
