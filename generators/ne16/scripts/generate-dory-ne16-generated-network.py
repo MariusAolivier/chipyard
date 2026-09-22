@@ -408,6 +408,18 @@ def main():
                     function_name,
                     header_text,
                 )
+                header_guard = f"CHIPYARD_DORY_{function_name.upper()}_H"
+                header_text, guard_replacements = re.subn(
+                    r"#ifndef\s+\w+\s*\n#define\s+\w+",
+                    f"#ifndef {header_guard}\n#define {header_guard}",
+                    header_text,
+                    count=1,
+                )
+                if guard_replacements != 1:
+                    raise ValueError(
+                        f"generated header has no recognizable include guard: "
+                        f"{generated_header}"
+                    )
                 header_path.write_text(header_text, encoding="utf-8", newline="\n")
                 if header_path != generated_header:
                     generated_header.unlink()
