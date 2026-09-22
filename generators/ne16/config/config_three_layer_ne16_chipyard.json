@@ -7,7 +7,7 @@
   "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
   "hardware_target": "PULP.GAP9_NE16",
   "hardware_description": "generators/ne16/config/hardware_description_chipyard_ne16.json",
-  "onnx_file": "../examples/layer_test/nonexistent.onnx",
+  "onnx_file": "generated.onnx",
   "code reserved space": 132000,
   "seed": 0,
   "input": {
