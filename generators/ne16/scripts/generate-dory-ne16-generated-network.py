@@ -189,8 +189,20 @@ def main():
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if config.get("hardware_target") != "PULP.GAP9_NE16":
         raise ValueError("network config must target PULP.GAP9_NE16")
-    base_config = args.chipyard_root.resolve() / config["base_config"]
-    if sha256(base_config.read_bytes()) != config["base_config_sha256"]:
+    chipyard_root = args.chipyard_root.resolve()
+    base_config = chipyard_root / config["base_config"]
+    pinned_base = subprocess.run(
+        ["git", "show", f"HEAD:{Path(config['base_config']).as_posix()}"],
+        cwd=chipyard_root,
+        check=False,
+        capture_output=True,
+    )
+    base_hash = (
+        sha256(pinned_base.stdout)
+        if pinned_base.returncode == 0
+        else sha256(base_config.read_bytes())
+    )
+    if base_hash != config["base_config_sha256"]:
         raise ValueError(f"pinned base config hash does not match {base_config}")
     dory_root = args.dory_root.resolve()
     output = args.output_dir.resolve()

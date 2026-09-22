@@ -2,7 +2,7 @@
   "schema_version": 1,
   "network_name": "chipyard-three-layer-ne16",
   "base_config": "generators/ne16/config/config_single_layer0_ne16_chipyard.json",
-  "base_config_sha256": "17cf2800aa0a810d41dddb3d14b30917d5747ada2f6d0e707c7869445a6c465b",
+  "base_config_sha256": "11152bf8fb772a641cd9d271914ab681d29c140861588f3da14deb07b22c2152",
   "dory_repository": "https://github.com/pulp-platform/dory",
   "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
   "hardware_target": "PULP.GAP9_NE16",
