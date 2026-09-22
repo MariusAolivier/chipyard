@@ -25,6 +25,7 @@ fi
   --output-dir tests/ne16-dory-generated-network
 "$dory_python" generators/ne16/scripts/test-import-dory-ne16-generated-network.py
 
+module load Miniconda3/24.7.1-0
 set +u
 source /cluster/work/mariusao/chipyard/env.sh
 set -u
