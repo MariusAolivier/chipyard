@@ -25,6 +25,7 @@ python3 generators/ne16/scripts/test-import-dory-ne16-generated-network.py
 
 if [[ -f /cluster/work/mariusao/chipyard/.conda-env/bin/activate ]]; then
   export RISCV="${RISCV:-}"
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
   source /cluster/work/mariusao/chipyard/.conda-env/bin/activate
   export PATH=/cluster/work/mariusao/chipyard/.conda-env/riscv-tools/bin:$PATH
 fi
