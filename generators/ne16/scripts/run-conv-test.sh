@@ -18,13 +18,21 @@ done
 run_test() {
   local binary=$1
   local expected=$2
-  local output
+  local output_file
+  output_file=$(mktemp)
   echo "Running $binary"
-  output=$(timeout "${TIMEOUT:-30m}" \
-    sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
-    +permissive +loadmem="$binary" +permissive-off "$binary" 2>&1)
-  printf '%s\n' "$output"
-  printf '%s\n' "$output" | grep -F "$expected" >/dev/null
+  if ! timeout "${TIMEOUT:-30m}" \
+      sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
+      +permissive +loadmem="$binary" +permissive-off "$binary" 2>&1 |
+      tee "$output_file"; then
+    rm -f "$output_file"
+    return 1
+  fi
+  if ! grep -F "$expected" "$output_file" >/dev/null; then
+    rm -f "$output_file"
+    return 1
+  fi
+  rm -f "$output_file"
 }
 
 for binary in \
