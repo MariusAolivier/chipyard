@@ -366,17 +366,45 @@ def main():
             if source_path is None:
                 raise ValueError(f"layer {index} has no generated entry point")
             source = source_path.read_text(encoding="utf-8")
-            function_name = find_function_name(source, source_path.name)
+            generated_function_name = find_function_name(source, source_path.name)
+            function_name = re.sub(
+                r"\d+$",
+                str(index),
+                generated_function_name,
+            )
+            if function_name == generated_function_name:
+                function_name = f"{generated_function_name}{index}"
+            source = re.sub(
+                rf"\b{re.escape(generated_function_name)}\b",
+                function_name,
+                source,
+            )
             source = adapt_single_core_source(source)
             source = f"/* DORY_COMMIT: {config['dory_commit']} */\n" + source
             source_path = layer_raw / f"{function_name}.c"
             source_path.write_text(source, encoding="utf-8", newline="\n")
             headers = copy_headers(app_dir, layer_raw)
+            generated_header = layer_raw / "inc" / f"{generated_function_name}.h"
+            if generated_header.exists():
+                header_path = layer_raw / "inc" / f"{function_name}.h"
+                header_text = generated_header.read_text(encoding="utf-8")
+                header_text = re.sub(
+                    rf"\b{re.escape(generated_function_name)}\b",
+                    function_name,
+                    header_text,
+                )
+                header_path.write_text(header_text, encoding="utf-8", newline="\n")
+                if header_path != generated_header:
+                    generated_header.unlink()
+                    headers.pop(Path(f"{generated_function_name}.h"), None)
+                    headers[Path(f"{function_name}.h")] = True
             write_single_core_monitor_header(layer_raw)
             headers[Path("monitor.h")] = True
             shared_headers.update(headers)
             input_hex = app_dir / "hex" / "inputs.hex"
-            weights_hex = app_dir / "hex" / f"{function_name}_weights.hex"
+            weights_hex = (
+                app_dir / "hex" / f"{generated_function_name}_weights.hex"
+            )
             if not input_hex.exists() or not weights_hex.exists():
                 raise ValueError(f"layer {index} is missing generated hex data")
             input_data = read_hex(input_hex)
