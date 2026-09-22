@@ -139,7 +139,7 @@ static inline void store_prepare(Layer tile, Layer body, Layer layer, TileIndex 
 
 static void load_async(Layer tile, TileStatus * const status, Layer body, Layer layer, Kernel kernel) {
 
-    DmaTransferConf conf_input, conf_weights, conf_scale, conf_bias;
+    DmaTransferConf conf_input = {0}, conf_weights = {0}, conf_scale = {0}, conf_bias = {0};
 
     if (status->input.is_transfer) {
         load_input_prepare(tile, body, layer, status->index, &conf_input, kernel);

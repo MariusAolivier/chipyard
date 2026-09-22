@@ -1,5 +1,6 @@
 #include "dory_dma.h"
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -38,19 +39,43 @@ static int transfer(DmaTransferConf conf, int force_1d) {
   const size_t stride_2d = conf.stride_2d > 0
                                ? (size_t)conf.stride_2d
                                : stride_1d * (size_t)copies_1d;
-  for (int plane = 0; plane < copies_2d; ++plane) {
-    for (int row = 0; row < copies_1d; ++row) {
-      uintptr_t ext = (uintptr_t)conf.ext + (size_t)plane * stride_2d +
-                      (size_t)row * stride_1d;
-      uint32_t loc = conf.loc + (uint32_t)((size_t)plane * stride_2d +
-                                            (size_t)row * stride_1d);
+  const size_t contiguous_length =
+      length <= SIZE_MAX / (size_t)copies_1d
+          ? length * (size_t)copies_1d
+          : SIZE_MAX;
+  const int can_batch = copies_1d > 1 && stride_1d == length &&
+                        contiguous_length <= stride_2d &&
+                        contiguous_length <= (size_t)INT_MAX;
+  if (can_batch) {
+    for (int plane = 0; plane < copies_2d; ++plane) {
+      uintptr_t ext = (uintptr_t)conf.ext + (size_t)plane * stride_2d;
+      uint32_t loc = conf.loc + (uint32_t)((size_t)plane * stride_2d);
       if (ext > UINT32_MAX) return -1;
       uint32_t offset;
-      if (scratch_offset(loc, length, &offset) != 0) return -1;
+      if (scratch_offset(loc, contiguous_length, &offset) != 0) return -1;
       int result = conf.dir == DORY_DMA_DIR_EXT2LOC
-                       ? ne16_scratchpad_write(offset, (const void *)ext, length)
-                       : ne16_scratchpad_read((void *)ext, offset, length);
+                       ? ne16_scratchpad_write(offset, (const void *)ext,
+                                               contiguous_length)
+                       : ne16_scratchpad_read((void *)ext, offset,
+                                              contiguous_length);
       if (result != 0) return result;
+    }
+  } else {
+    for (int plane = 0; plane < copies_2d; ++plane) {
+      for (int row = 0; row < copies_1d; ++row) {
+        uintptr_t ext = (uintptr_t)conf.ext + (size_t)plane * stride_2d +
+                        (size_t)row * stride_1d;
+        uint32_t loc = conf.loc + (uint32_t)((size_t)plane * stride_2d +
+                                              (size_t)row * stride_1d);
+        if (ext > UINT32_MAX) return -1;
+        uint32_t offset;
+        if (scratch_offset(loc, length, &offset) != 0) return -1;
+        int result = conf.dir == DORY_DMA_DIR_EXT2LOC
+                         ? ne16_scratchpad_write(offset, (const void *)ext,
+                                                 length)
+                         : ne16_scratchpad_read((void *)ext, offset, length);
+        if (result != 0) return result;
+      }
     }
   }
   if (conf.dir == DORY_DMA_DIR_EXT2LOC) {

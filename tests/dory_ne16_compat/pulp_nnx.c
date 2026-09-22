@@ -35,7 +35,7 @@ void nnx_term(void) {
 }
 
 int nnx_dispatch_check(void) {
-  return error_code == 0 && !active && !ne16_queue_full();
+  return error_code == 0 && !active;
 }
 
 void nnx_dispatch_check_blocking(void) {

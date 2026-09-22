@@ -84,14 +84,7 @@ int main(void) {
     if (length > sizeof(sentinel)) length = sizeof(sentinel);
     if (ne16_scratchpad_write(offset, sentinel, length) != 0) return 1;
   }
-  uint8_t zero[256] = {0};
-  for (uint32_t offset = DORY_L1_PADDING_GUARD; offset < DORY_L1_TOTAL;
-       offset += sizeof(zero)) {
-    uint32_t length = DORY_L1_TOTAL - offset;
-    if (length > sizeof(zero)) length = sizeof(zero);
-    if (ne16_scratchpad_write(offset, zero, length) != 0) return 1;
-  }
-
+  // The generated loader overwrites every live L1 region before execution.
   layer_args_t args = {
       .L2_input = input_ptr,
       .L2_weights = weights_ptr,
