@@ -176,6 +176,17 @@ static inline void monitor_consume_end(Monitor monitor) {
     )
 
 
+def write_network_header(destination):
+    (destination / "inc" / "network.h").write_text(
+        """#ifndef CHIPYARD_DORY_NETWORK_H
+#define CHIPYARD_DORY_NETWORK_H
+#endif
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def record(path, root):
     data = path.read_bytes()
     return {
@@ -367,7 +378,7 @@ def main():
                 str(index),
                 generated_function_name,
             )
-            if function_name == generated_function_name:
+            if not re.search(r"\d+$", generated_function_name):
                 function_name = f"{generated_function_name}{index}"
             source = re.sub(
                 rf"\b{re.escape(generated_function_name)}\b",
@@ -394,7 +405,9 @@ def main():
                     headers.pop(Path(f"{generated_function_name}.h"), None)
                     headers[Path(f"{function_name}.h")] = True
             write_single_core_monitor_header(layer_raw)
+            write_network_header(layer_raw)
             headers[Path("monitor.h")] = True
+            headers[Path("network.h")] = True
             shared_headers.update(headers)
             input_hex = app_dir / "hex" / "inputs.hex"
             weights_hex = (
