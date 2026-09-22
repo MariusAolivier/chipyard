@@ -8,6 +8,27 @@ cd "$chipyard_root"
 python3 "$ne16_root/scripts/test-import-dory-ne16-generated-tile.py"
 python3 "$ne16_root/scripts/test-import-dory-ne16-generated-network.py"
 cmake -S tests -B tests/build -D CMAKE_BUILD_TYPE=Debug
+if [[ "${ONLY_NETWORK:-0}" == 1 ]]; then
+  cmake --build tests/build --target ne16-dory-generated-network \
+    --parallel "${JOBS:-2}"
+  output_file=$(mktemp)
+  echo "Running tests/build/ne16-dory-generated-network.riscv"
+  if ! timeout "${TIMEOUT:-30m}" \
+      sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
+      +permissive +loadmem=tests/build/ne16-dory-generated-network.riscv \
+      +permissive-off tests/build/ne16-dory-generated-network.riscv 2>&1 |
+      tee "$output_file"; then
+    rm -f "$output_file"
+    exit 1
+  fi
+  if ! grep -F "DORY generated three-layer NE16 network PASS" \
+      "$output_file" >/dev/null; then
+    rm -f "$output_file"
+    exit 1
+  fi
+  rm -f "$output_file"
+  exit 0
+fi
 for test in ne16-descriptor ne16-dma ne16-dory-generated-tile \
   ne16-dory-generated-layer0 ne16-dory-generated-layer1 \
   ne16-dory-generated-layer2 ne16-dory-generated-network \

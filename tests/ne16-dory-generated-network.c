@@ -124,6 +124,8 @@ static int run_layer(const char *name, generated_layer_fn function,
   };
 
   function(&args);
+  printf("DORY generated network returned from %s\n", name);
+  fflush(stdout);
   if (dory_ne16_compat_error() != 0) {
     printf("%s reported adapter error %d\n", name,
            dory_ne16_compat_error());
