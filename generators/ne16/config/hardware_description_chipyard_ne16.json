@@ -1,5 +1,5 @@
 {
-  "name": "Chipyard/NE16",
+  "name": "PULP/GAP9",
   "memory": {
     "levels": 3,
     "L1": {
