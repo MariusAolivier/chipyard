@@ -245,12 +245,15 @@ def main():
         manifest_layers = []
         shared_headers = {}
         for index, params in enumerate(config["layers"]):
+            parser_params = dict(params)
+            parser_params["onnx_file"] = config["onnx_file"]
+            parser_params["code reserved space"] = config["code reserved space"]
             layer_raw = raw / f"layer{index}"
             layer_raw.mkdir()
             app_dir = layer_raw / "application"
             input_tensor = generate_layer(
                 generator,
-                params,
+                parser_params,
                 index,
                 layer_raw,
                 app_dir,
