@@ -25,13 +25,9 @@ fi
   --output-dir tests/ne16-dory-generated-network
 "$dory_python" generators/ne16/scripts/test-import-dory-ne16-generated-network.py
 
-if [[ -f /cluster/work/mariusao/chipyard/.conda-env/bin/activate ]]; then
-  export RISCV="${RISCV:-}"
-  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
-  source /cluster/work/mariusao/chipyard/.conda-env/bin/activate
-  export PATH=/cluster/work/mariusao/chipyard/.conda-env/riscv-tools/bin:$PATH
-fi
+set +u
 source /cluster/work/mariusao/chipyard/env.sh
+set -u
 export XDG_RUNTIME_DIR=/tmp/${USER}-runtime-${SLURM_JOB_ID}
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
