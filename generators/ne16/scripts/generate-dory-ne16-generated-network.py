@@ -187,6 +187,15 @@ def write_network_header(destination):
     )
 
 
+def write_compatibility_headers(destination, chipyard_root):
+    compatibility_dir = chipyard_root / "tests" / "dory_ne16_compat"
+    for name in ("ne16_hal.h", "pulp_nnx.h", "pulp_nnx_util.h"):
+        source = compatibility_dir / name
+        if not source.is_file():
+            raise ValueError(f"missing Chipyard compatibility header: {source}")
+        shutil.copy2(source, destination / "inc" / name)
+
+
 def record(path, root):
     data = path.read_bytes()
     return {
@@ -406,6 +415,7 @@ def main():
                     headers[Path(f"{function_name}.h")] = True
             write_single_core_monitor_header(layer_raw)
             write_network_header(layer_raw)
+            write_compatibility_headers(layer_raw, chipyard_root)
             headers[Path("monitor.h")] = True
             headers[Path("network.h")] = True
             shared_headers.update(headers)
