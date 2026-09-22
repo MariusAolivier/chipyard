@@ -9,19 +9,21 @@ set -euo pipefail
 
 chipyard_root=${CHIPYARD_ROOT:-/cluster/work/mariusao/chipyard-dory-agent}
 dory_root=${DORY_ROOT:-/cluster/work/mariusao/dory}
+dory_python=${DORY_PYTHON:-$dory_root/.venv/bin/python3}
 
 cd "$chipyard_root"
 export PAGER=cat
 export GIT_PAGER=cat
 
-if [[ -f /cluster/work/mariusao/dory/.venv/bin/activate ]]; then
-  source /cluster/work/mariusao/dory/.venv/bin/activate
+if [[ ! -x "$dory_python" ]]; then
+  echo "DORY Python interpreter not found: $dory_python" >&2
+  exit 1
 fi
-python3 generators/ne16/scripts/generate-dory-ne16-generated-network.py \
+"$dory_python" generators/ne16/scripts/generate-dory-ne16-generated-network.py \
   --dory-root "$dory_root" \
   --config generators/ne16/config/config_three_layer_ne16_chipyard.json \
   --output-dir tests/ne16-dory-generated-network
-python3 generators/ne16/scripts/test-import-dory-ne16-generated-network.py
+"$dory_python" generators/ne16/scripts/test-import-dory-ne16-generated-network.py
 
 if [[ -f /cluster/work/mariusao/chipyard/.conda-env/bin/activate ]]; then
   export RISCV="${RISCV:-}"
