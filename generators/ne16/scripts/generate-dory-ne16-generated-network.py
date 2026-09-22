@@ -373,7 +373,7 @@ def main():
             source_path.write_text(source, encoding="utf-8", newline="\n")
             headers = copy_headers(app_dir, layer_raw)
             write_single_core_monitor_header(layer_raw)
-            headers["monitor.h"] = True
+            headers[Path("monitor.h")] = True
             shared_headers.update(headers)
             input_hex = app_dir / "hex" / "inputs.hex"
             weights_hex = app_dir / "hex" / f"{function_name}_weights.hex"
