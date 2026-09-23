@@ -167,6 +167,15 @@ int main(void) {
          sizeof(layer2_weights));
   if (initialize_guards() != 0) return 1;
   ne16_reset();
+  printf("DORY NNX scratchpad probe begin\n");
+  nnx_init(8);
+  if (ne16_scratchpad_write(0x1000u, layer0_weights,
+                            sizeof(layer0_weights)) != 0) {
+    printf("DORY NNX scratchpad probe FAIL\n");
+    return 1;
+  }
+  nnx_term();
+  printf("DORY NNX scratchpad probe done\n");
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
   if (run_layer("layer0", BNReluConvolution0, layer0_input, layer0_weights,
