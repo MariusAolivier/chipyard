@@ -29,14 +29,12 @@ void nnx_init(uint32_t max_stall) {
   (void)max_stall;
   printf("DORY NNX init\n");
   fflush(stdout);
-  ne16_reset();
   active = 0;
   active_polls = 0;
 }
 
 void nnx_term(void) {
   if (active) dory_ne16_compat_set_error(-20);
-  ne16_reset();
 }
 
 int nnx_dispatch_check(void) {
