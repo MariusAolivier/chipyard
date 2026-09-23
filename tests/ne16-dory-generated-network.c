@@ -167,6 +167,21 @@ int main(void) {
          sizeof(layer2_weights));
   if (initialize_guards() != 0) return 1;
   ne16_reset();
+  printf("DORY raw DMA sequence input begin\n");
+  fflush(stdout);
+  if (ne16_scratchpad_write(0x800u, layer0_input, sizeof(layer0_input)) != 0) {
+    printf("DORY raw DMA sequence input failed\n");
+    return 1;
+  }
+  printf("DORY raw DMA sequence weight begin\n");
+  fflush(stdout);
+  if (ne16_scratchpad_write(0x1000u, layer0_weights,
+                            sizeof(layer0_weights)) != 0) {
+    printf("DORY raw DMA sequence weight failed\n");
+    return 1;
+  }
+  printf("DORY raw DMA sequence weight done\n");
+  fflush(stdout);
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
   if (run_layer("layer0", BNReluConvolution0, layer0_input, layer0_weights,
