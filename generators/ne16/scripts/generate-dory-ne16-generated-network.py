@@ -134,24 +134,22 @@ def adapt_single_core_source(source):
         "DmaTransferConf conf_input = {0}, conf_weights = {0}, "
         "conf_scale = {0}, conf_bias = {0};",
     )
-    source = source.replace(
-        "dma_transfer_1d_async_ptr(&conf_weights);",
-        'printf("DORY load weights begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async_ptr(&conf_weights); "
-        'printf("DORY load weights returned\\n"); fflush(stdout);',
-    )
-    source = source.replace(
-        "dma_transfer_1d_async_ptr(&conf_scale);",
-        'printf("DORY load scale begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async_ptr(&conf_scale); "
-        'printf("DORY load scale returned\\n"); fflush(stdout);',
-    )
-    source = source.replace(
-        "dma_transfer_1d_async_ptr(&conf_bias);",
-        'printf("DORY load bias begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async_ptr(&conf_bias); "
-        'printf("DORY load bias returned\\n"); fflush(stdout);',
-    )
+    for name in ("weights", "scale", "bias"):
+        pointer_call = f"dma_transfer_1d_async_ptr(&conf_{name});"
+        value_call = f"dma_transfer_1d_async(conf_{name});"
+        replacement = (
+            f'printf("DORY load {name} begin\\n"); fflush(stdout); '
+            f"dma_transfer_1d_async_ptr(&conf_{name}); "
+            f'printf("DORY load {name} returned\\n"); fflush(stdout);'
+        )
+        if pointer_call in source:
+            source = source.replace(pointer_call, replacement, 1)
+        elif value_call in source:
+            source = source.replace(value_call, replacement, 1)
+        else:
+            raise ValueError(
+                f"generated source is missing DMA call for conf_{name}"
+            )
     if "pi_cl_" in source:
         raise ValueError("generated source still contains multi-core PULP calls")
     return source
