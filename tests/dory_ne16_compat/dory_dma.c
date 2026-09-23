@@ -93,7 +93,10 @@ static int transfer(DmaTransferConf conf, int force_1d) {
 }
 
 void dma_transfer_1d_async(DmaTransferConf conf) {
-  if (transfer(conf, 1) != 0) remember_error(-40);
+  int result = transfer(conf, 1);
+  printf("DORY DMA async returned result=%d\n", result);
+  fflush(stdout);
+  if (result != 0) remember_error(-40);
 }
 void dma_transfer_2d_async(DmaTransferConf conf) {
   if (transfer(conf, 0) != 0) remember_error(-41);
