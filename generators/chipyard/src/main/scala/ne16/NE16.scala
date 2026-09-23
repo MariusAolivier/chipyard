@@ -227,7 +227,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
           scratchpadWritePending := false.B
         }
         when(scratchpadResponsePrints =/= 255.U) {
-          printf(p"NE16 scratchpad response fire address=0x${Hexadecimal(scratchpad.d.bits.address)} read=$scratchpadReadPending issued=$scratchpadReadIssued\n")
+          val responseAddress =
+            Mux(scratchpadReadPending, scratchpadReadRequest.address,
+              scratchpadWriteRequest.address)
+          printf(p"NE16 scratchpad response fire address=0x${Hexadecimal(responseAddress)} read=$scratchpadReadPending issued=$scratchpadReadIssued\n")
           scratchpadResponsePrints := scratchpadResponsePrints + 1.U
         }
       }
