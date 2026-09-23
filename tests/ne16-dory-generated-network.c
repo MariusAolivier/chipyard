@@ -146,7 +146,8 @@ static int run_layer(const char *name, generated_layer_fn function,
            current.ne16_completion_count - previous->ne16_completion_count);
     return -1;
   }
-  if (check_output(name, output, expected, output_bytes) != 0) {
+  if (check_output(name, output, expected, output_bytes) != 0 ||
+      check_guards() != 0) {
     return -1;
   }
   printf("DORY generated network finished %s\n", name);
@@ -164,8 +165,8 @@ int main(void) {
          sizeof(layer1_weights));
   memcpy(layer2_weights, dory_BNReluConvolution2_parameters,
          sizeof(layer2_weights));
-  ne16_reset();
   if (initialize_guards() != 0) return 1;
+  ne16_reset();
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
   if (run_layer("layer0", BNReluConvolution0, layer0_input, layer0_weights,
@@ -185,11 +186,6 @@ int main(void) {
                 &previous) != 0) {
     return 1;
   }
-  if (check_guards() != 0) {
-    printf("final scratchpad guard check failed\n");
-    return 1;
-  }
-
   dory_ne16_stats_t stats = dory_ne16_compat_stats();
   if (stats.ne16_dispatch_count != DORY_LAYER_0_TILE_COUNT +
                                       DORY_LAYER_1_TILE_COUNT +
