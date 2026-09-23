@@ -33,4 +33,9 @@ export XDG_RUNTIME_DIR=/tmp/${USER}-runtime-${SLURM_JOB_ID}
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
+if [[ "${BUILD_SIMULATOR:-1}" == 1 ]]; then
+  make -C sims/verilator CONFIG=NE16RocketConfig \
+    -j "${JOBS:-${SLURM_CPUS_PER_TASK:-2}}"
+fi
+
 generators/ne16/scripts/run-conv-test.sh
