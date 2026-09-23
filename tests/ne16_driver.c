@@ -64,7 +64,7 @@ int ne16_scratchpad_write(uint32_t offset, const void *source, size_t size) {
   const uint8_t *src = (const uint8_t *)source;
   uintptr_t address = NE16_SCRATCH_BASE + offset;
   const uint32_t progress_start = offset;
-  const size_t progress_step = progress_start >= 0xff00u ? 4u : 256u;
+  const size_t progress_step = 4u;
   size_t progress_next = 0;
   while (size != 0 && (address & 3u) != 0) {
     ne16_write8(address, *src);
