@@ -2,8 +2,6 @@
 
 #include <stdio.h>
 
-void ne16_memory_fence(void);
-
 static inline void ne16_write32(uintptr_t address, uint32_t value) {
   *(volatile uint32_t *)address = value;
 }
@@ -67,7 +65,6 @@ int ne16_scratchpad_write(uint32_t offset, const void *source, size_t size) {
   uintptr_t address = NE16_SCRATCH_BASE + offset;
   while (size != 0 && (address & 3u) != 0) {
     ne16_write8(address, *src);
-    ne16_memory_fence();
     ++src;
     ++address;
     --size;
@@ -76,14 +73,12 @@ int ne16_scratchpad_write(uint32_t offset, const void *source, size_t size) {
     uint32_t word;
     __builtin_memcpy(&word, src, sizeof(word));
     ne16_write32(address, word);
-    ne16_memory_fence();
     src += sizeof(word);
     address += sizeof(word);
     size -= sizeof(word);
   }
   while (size != 0) {
     ne16_write8(address, *src);
-    ne16_memory_fence();
     ++src;
     ++address;
     --size;
