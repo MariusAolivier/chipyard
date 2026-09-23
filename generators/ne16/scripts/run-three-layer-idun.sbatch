@@ -19,6 +19,7 @@ if [[ ! -x "$dory_python" ]]; then
   echo "DORY Python interpreter not found: $dory_python" >&2
   exit 1
 fi
+rm -rf tests/ne16-dory-generated-network
 "$dory_python" generators/ne16/scripts/generate-dory-ne16-generated-network.py \
   --dory-root "$dory_root" \
   --config generators/ne16/config/config_three_layer_ne16_chipyard.json \
