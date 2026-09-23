@@ -123,6 +123,7 @@ static int run_layer(const char *name, generated_layer_fn function,
                  NET_UTILS_PAD_BOTTOM | NET_UTILS_PAD_LEFT,
   };
 
+  if (previous->ne16_dispatch_count != 0) ne16_reset();
   function(&args);
   printf("DORY generated network returned from %s\n", name);
   fflush(stdout);
