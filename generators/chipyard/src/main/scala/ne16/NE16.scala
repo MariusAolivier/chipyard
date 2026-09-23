@@ -181,6 +181,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
+      val scratchpadStallPrints = RegInit(0.U(8.W))
 
       scratchpad.a.ready := scratchpadReady
       scratchpad.d.valid := scratchpadReadPending || scratchpadWriteFire
@@ -188,6 +189,12 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         Mux(scratchpadReadPending, scratchpadReadRequest, scratchpad.a.bits))
       scratchpad.d.bits.opcode :=
         Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
+
+      when(scratchpad.a.valid && !scratchpadReady &&
+          scratchpadStallPrints =/= 255.U) {
+        printf(p"NE16 scratchpad A stalled address=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData dReady=${scratchpad.d.ready} readPending=$scratchpadReadPending\n")
+        scratchpadStallPrints := scratchpadStallPrints + 1.U
+      }
 
       when(scratchpadReadFire) {
         scratchpadReadPending := true.B
