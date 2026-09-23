@@ -210,7 +210,7 @@ def write_network_header(destination):
 
 def write_compatibility_headers(destination, chipyard_root):
     compatibility_dir = chipyard_root / "tests" / "dory_ne16_compat"
-    for name in ("ne16_hal.h", "pulp_nnx.h", "pulp_nnx_util.h"):
+    for name in ("dory_dma.h", "ne16_hal.h", "pulp_nnx.h", "pulp_nnx_util.h"):
         source = compatibility_dir / name
         if not source.is_file():
             raise ValueError(f"missing Chipyard compatibility header: {source}")
