@@ -89,10 +89,14 @@ static int transfer(DmaTransferConf conf, int force_1d) {
   }
   printf("DORY DMA end dir=%d\n", conf.dir);
   fflush(stdout);
+  printf("DORY DMA transfer before return\n");
+  fflush(stdout);
   return 0;
 }
 
 void dma_transfer_1d_async(DmaTransferConf conf) {
+  printf("DORY DMA wrapper begin\n");
+  fflush(stdout);
   int result = transfer(conf, 1);
   printf("DORY DMA async returned result=%d\n", result);
   fflush(stdout);
