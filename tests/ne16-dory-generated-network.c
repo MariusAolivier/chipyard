@@ -5,6 +5,7 @@
 #include "BNReluConvolution0.h"
 #include "BNReluConvolution1.h"
 #include "BNReluConvolution2.h"
+#include "dory_dma.h"
 #include "dory_generated_network_data.h"
 #include "ne16_driver.h"
 #include "net_utils.h"
@@ -181,6 +182,19 @@ int main(void) {
     return 1;
   }
   printf("DORY raw DMA sequence weight done\n");
+  fflush(stdout);
+  uint32_t probe_ext;
+  if (pointer32(layer0_weights, &probe_ext) != 0) return 1;
+  DmaTransferConf probe = {
+      .ext = probe_ext,
+      .loc = NE16_SCRATCH_BASE + 0x1000u,
+      .length_1d_copy = (int)sizeof(layer0_weights),
+      .dir = DORY_DMA_DIR_EXT2LOC,
+  };
+  printf("DORY direct DMA wrapper probe begin\n");
+  fflush(stdout);
+  dma_transfer_1d_async_ptr(&probe);
+  printf("DORY direct DMA wrapper probe done\n");
   fflush(stdout);
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
