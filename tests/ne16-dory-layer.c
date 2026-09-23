@@ -126,10 +126,18 @@ int main(void) {
   }
   printf("DORY layer init weights begin\n");
   fflush(stdout);
-  if (ne16_scratchpad_write(WEIGHTS_OFFSET, ne16_dory_weights,
-                            NE16_DORY_WEIGHTS_BYTES) != 0) {
-    printf("DORY layer init weights failed\n");
-    return 1;
+  for (size_t offset = 0; offset < NE16_DORY_WEIGHTS_BYTES; offset += 256u) {
+    size_t size = NE16_DORY_WEIGHTS_BYTES - offset;
+    if (size > 256u) size = 256u;
+    printf("DORY layer init weights chunk 0x%x begin\n", (unsigned)offset);
+    fflush(stdout);
+    if (ne16_scratchpad_write(WEIGHTS_OFFSET + (uint32_t)offset,
+                              ne16_dory_weights + offset, size) != 0) {
+      printf("DORY layer init weights chunk 0x%x failed\n", (unsigned)offset);
+      return 1;
+    }
+    printf("DORY layer init weights chunk 0x%x done\n", (unsigned)offset);
+    fflush(stdout);
   }
   printf("DORY layer init scale begin\n");
   fflush(stdout);
