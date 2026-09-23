@@ -120,6 +120,10 @@ void dma_transfer_1d_async_ptr(const DmaTransferConf *conf) {
 void dma_transfer_1d_async(DmaTransferConf conf) {
   dma_transfer_1d_async_ptr(&conf);
 }
+void dma_transfer_async_ptr(const DmaTransferConf *conf) {
+  int result = transfer(conf, 0);
+  if (result != 0) remember_error(-43);
+}
 void dma_transfer_2d_async(DmaTransferConf conf) {
   if (transfer(&conf, 0) != 0) remember_error(-41);
 }

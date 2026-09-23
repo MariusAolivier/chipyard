@@ -134,6 +134,11 @@ def adapt_single_core_source(source):
         "DmaTransferConf conf_input = {0}, conf_weights = {0}, "
         "conf_scale = {0}, conf_bias = {0};",
     )
+    for name in ("input", "store"):
+        value_call = f"dma_transfer_async(conf_{name});"
+        pointer_call = f"dma_transfer_async_ptr(&conf_{name});"
+        if value_call in source:
+            source = source.replace(value_call, pointer_call, 1)
     for name in ("weights", "scale", "bias"):
         pointer_call = f"dma_transfer_1d_async_ptr(&conf_{name});"
         value_call = f"dma_transfer_1d_async(conf_{name});"
