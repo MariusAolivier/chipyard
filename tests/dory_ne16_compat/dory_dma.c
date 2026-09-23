@@ -97,6 +97,9 @@ static int transfer(DmaTransferConf conf, int force_1d) {
 void dma_transfer_1d_async(DmaTransferConf conf) {
   printf("DORY DMA wrapper begin\n");
   fflush(stdout);
+  printf("DORY DMA wrapper args ext=0x%x loc=0x%x len=%d dir=%d\n",
+         conf.ext, conf.loc, conf.length_1d_copy, conf.dir);
+  fflush(stdout);
   int result = transfer(conf, 1);
   printf("DORY DMA async returned result=%d\n", result);
   fflush(stdout);
