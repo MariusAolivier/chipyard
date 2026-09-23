@@ -136,18 +136,21 @@ def adapt_single_core_source(source):
     )
     source = source.replace(
         "dma_transfer_1d_async(conf_weights);",
-        'printf("DORY load weights\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_weights);",
+        'printf("DORY load weights begin\\n"); fflush(stdout); '
+        "dma_transfer_1d_async(conf_weights); "
+        'printf("DORY load weights returned\\n"); fflush(stdout);',
     )
     source = source.replace(
         "dma_transfer_1d_async(conf_scale);",
-        'printf("DORY load scale\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_scale);",
+        'printf("DORY load scale begin\\n"); fflush(stdout); '
+        "dma_transfer_1d_async(conf_scale); "
+        'printf("DORY load scale returned\\n"); fflush(stdout);',
     )
     source = source.replace(
         "dma_transfer_1d_async(conf_bias);",
-        'printf("DORY load bias\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_bias);",
+        'printf("DORY load bias begin\\n"); fflush(stdout); '
+        "dma_transfer_1d_async(conf_bias); "
+        'printf("DORY load bias returned\\n"); fflush(stdout);',
     )
     if "pi_cl_" in source:
         raise ValueError("generated source still contains multi-core PULP calls")
