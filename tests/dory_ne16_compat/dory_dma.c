@@ -25,7 +25,8 @@ static int scratch_offset(uint32_t address, size_t length, uint32_t *offset) {
   return 0;
 }
 
-static int transfer(DmaTransferConf conf, int force_1d) {
+static int transfer(const DmaTransferConf *conf_ptr, int force_1d) {
+  DmaTransferConf conf = *conf_ptr;
   printf("DORY DMA begin dir=%d ext=0x%x loc=0x%x len=%d\n", conf.dir,
          conf.ext, conf.loc, conf.length_1d_copy);
   fflush(stdout);
@@ -100,19 +101,19 @@ void dma_transfer_1d_async(DmaTransferConf conf) {
   printf("DORY DMA wrapper args ext=0x%x loc=0x%x len=%d dir=%d\n",
          conf.ext, conf.loc, conf.length_1d_copy, conf.dir);
   fflush(stdout);
-  int result = transfer(conf, 1);
+  int result = transfer(&conf, 1);
   printf("DORY DMA async returned result=%d\n", result);
   fflush(stdout);
   if (result != 0) remember_error(-40);
 }
 void dma_transfer_2d_async(DmaTransferConf conf) {
-  if (transfer(conf, 0) != 0) remember_error(-41);
+  if (transfer(&conf, 0) != 0) remember_error(-41);
 }
 void dma_transfer_3d_async(DmaTransferConf conf) {
-  if (transfer(conf, 0) != 0) remember_error(-42);
+  if (transfer(&conf, 0) != 0) remember_error(-42);
 }
 void dma_transfer_async(DmaTransferConf conf) {
-  if (transfer(conf, 0) != 0) remember_error(-43);
+  if (transfer(&conf, 0) != 0) remember_error(-43);
 }
 
 DmaTransfer dma_transfer_create(void) {
