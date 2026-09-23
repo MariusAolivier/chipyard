@@ -129,6 +129,11 @@ def adapt_single_core_source(source):
         if old not in source:
             raise ValueError(f"generated source is missing expected text: {old}")
         source = source.replace(old, new)
+    source = source.replace(
+        "DmaTransferConf conf_input, conf_weights, conf_scale, conf_bias;",
+        "DmaTransferConf conf_input = {0}, conf_weights = {0}, "
+        "conf_scale = {0}, conf_bias = {0};",
+    )
     if "pi_cl_" in source:
         raise ValueError("generated source still contains multi-core PULP calls")
     return source
