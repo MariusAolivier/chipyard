@@ -170,7 +170,20 @@ int main(void) {
   ne16_reset();
   printf("DORY raw DMA sequence input begin\n");
   fflush(stdout);
-  if (ne16_scratchpad_write(0x800u, layer0_input, sizeof(layer0_input)) != 0) {
+  uint32_t probe_input_ext;
+  if (pointer32(layer0_input, &probe_input_ext) != 0) return 1;
+  DmaTransferConf input_probe = {
+      .ext = probe_input_ext,
+      .loc = NE16_SCRATCH_BASE + 0x800u,
+      .stride_2d = 128,
+      .number_of_2d_copies = 8,
+      .stride_1d = 16,
+      .number_of_1d_copies = 8,
+      .length_1d_copy = 16,
+      .dir = DORY_DMA_DIR_EXT2LOC,
+  };
+  dma_transfer_async_ptr(&input_probe);
+  if (dory_ne16_compat_error() != 0) {
     printf("DORY raw DMA sequence input failed\n");
     return 1;
   }
