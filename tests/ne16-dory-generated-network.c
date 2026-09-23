@@ -188,7 +188,7 @@ int main(void) {
   DmaTransferConf probe = {
       .ext = probe_ext,
       .loc = NE16_SCRATCH_BASE + 0x1000u,
-      .length_1d_copy = (int)sizeof(layer0_weights),
+      .length_1d_copy = 2304,
       .dir = DORY_DMA_DIR_EXT2LOC,
   };
   printf("DORY direct DMA wrapper probe begin\n");
