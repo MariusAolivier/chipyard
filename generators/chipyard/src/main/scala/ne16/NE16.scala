@@ -172,7 +172,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
 
       val scratchpadReadPending = RegInit(false.B)
       val scratchpadReadIssued = RegInit(false.B)
+      val scratchpadWritePending = RegInit(false.B)
       val scratchpadReadRequest =
+        RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
+      val scratchpadWriteRequest =
         RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
       val scratchpadReadBank0 = RegInit(0.U(bankIndexBits.W))
       val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
@@ -180,7 +183,8 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         RegInit(0.U((beatBytes * 8).W))
 
       val scratchpadReady =
-        !scratchpadReadPending && !scratchpadReadIssued && scratchpad.d.ready
+        !scratchpadReadPending && !scratchpadReadIssued &&
+          !scratchpadWritePending && scratchpad.d.ready
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
@@ -188,9 +192,9 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadResponsePrints = RegInit(0.U(8.W))
 
       scratchpad.a.ready := scratchpadReady
-      scratchpad.d.valid := scratchpadReadPending || scratchpadWriteFire
+      scratchpad.d.valid := scratchpadReadPending || scratchpadWritePending
       scratchpad.d.bits := scratchpadEdge.AccessAck(
-        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpad.a.bits))
+        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpadWriteRequest))
       scratchpad.d.bits.opcode :=
         Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
 
@@ -211,14 +215,24 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         scratchpadReadBank0 := bankIndex(beatWordIndex)
         scratchpadReadBank1 := bankIndex(beatWordIndex + 1.U)
       }
-      when(scratchpadReadPending && scratchpad.d.fire) {
+      when(scratchpadWriteFire) {
+        scratchpadWritePending := true.B
+        scratchpadWriteRequest := scratchpad.a.bits
+      }
+      when(scratchpad.d.fire) {
+        when(scratchpadReadPending) {
+          scratchpadReadPending := false.B
+        }
+        when(scratchpadWritePending) {
+          scratchpadWritePending := false.B
+        }
         when(scratchpadResponsePrints =/= 255.U) {
           val responseAddress =
-            scratchpadReadRequest.address
+            Mux(scratchpadReadPending, scratchpadReadRequest.address,
+              scratchpadWriteRequest.address)
           printf(p"NE16 scratchpad response fire address=0x${Hexadecimal(responseAddress)} read=$scratchpadReadPending issued=$scratchpadReadIssued\n")
           scratchpadResponsePrints := scratchpadResponsePrints + 1.U
         }
-        scratchpadReadPending := false.B
       }
       when(scratchpadReadPending && !scratchpad.d.ready &&
           scratchpadResponsePrints =/= 255.U) {
