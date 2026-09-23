@@ -137,19 +137,19 @@ def adapt_single_core_source(source):
     source = source.replace(
         "dma_transfer_1d_async_ptr(&conf_weights);",
         'printf("DORY load weights begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_weights); "
+        "dma_transfer_1d_async_ptr(&conf_weights); "
         'printf("DORY load weights returned\\n"); fflush(stdout);',
     )
     source = source.replace(
         "dma_transfer_1d_async_ptr(&conf_scale);",
         'printf("DORY load scale begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_scale); "
+        "dma_transfer_1d_async_ptr(&conf_scale); "
         'printf("DORY load scale returned\\n"); fflush(stdout);',
     )
     source = source.replace(
         "dma_transfer_1d_async_ptr(&conf_bias);",
         'printf("DORY load bias begin\\n"); fflush(stdout); '
-        "dma_transfer_1d_async(conf_bias); "
+        "dma_transfer_1d_async_ptr(&conf_bias); "
         'printf("DORY load bias returned\\n"); fflush(stdout);',
     )
     if "pi_cl_" in source:
