@@ -18,6 +18,9 @@ static inline uint8_t ne16_read8(uintptr_t address) {
   return *(volatile uint8_t *)address;
 }
 
+static uint8_t submitted_task_id;
+static int task_submitted;
+
 static int valid_range(uint32_t offset, size_t size) {
   return offset <= NE16_SCRATCH_BYTES && size <= NE16_SCRATCH_BYTES - offset;
 }
@@ -31,7 +34,13 @@ int ne16_queue_full(void) {
 }
 
 int ne16_idle(void) {
-  return ne16_status() == 0;
+  if (!task_submitted) return 1;
+  const uint8_t last_task_id =
+      (uint8_t)ne16_read32(NE16_CONTROL_BASE + NE16_RUNNING_JOB);
+  const uint32_t queue_status = ne16_status();
+  const uint8_t previous_task_id = (uint8_t)(submitted_task_id - 1u);
+  return last_task_id != previous_task_id &&
+         !(last_task_id == submitted_task_id && queue_status != 0);
 }
 
 void ne16_memory_fence(void) {
@@ -41,6 +50,7 @@ void ne16_memory_fence(void) {
 void ne16_reset(void) {
   ne16_write32(NE16_CONTROL_BASE + NE16_SOFT_CLEAR, 0);
   ne16_memory_fence();
+  task_submitted = 0;
   for (uint32_t settle = 0; settle < 4096u; ++settle) {
     (void)ne16_status();
   }
@@ -245,9 +255,12 @@ int ne16_task_set_padding(ne16_task_t *task, uint8_t top, uint8_t bottom,
 }
 
 int ne16_submit(const ne16_task_t *task) {
-  if (task == NULL || ne16_queue_full()) {
+  if (task == NULL) {
     return task == NULL ? -1 : -2;
   }
+  uint32_t acquired = ne16_read32(NE16_CONTROL_BASE + NE16_ACQUIRE);
+  if (acquired >= NE16_STATUS_FULL) return -2;
+  submitted_task_id = (uint8_t)acquired;
 
   for (int i = 0; i < NE16_TASK_WORDS; ++i) {
     ne16_write32(NE16_CONTROL_BASE + NE16_TASK_REGS + 4u * (uint32_t)i,
@@ -255,6 +268,7 @@ int ne16_submit(const ne16_task_t *task) {
   }
   ne16_memory_fence();
   ne16_write32(NE16_CONTROL_BASE + NE16_TRIGGER, 0);
+  task_submitted = 1;
   return 0;
 }
 
