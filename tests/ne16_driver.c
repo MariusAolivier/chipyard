@@ -41,6 +41,9 @@ void ne16_memory_fence(void) {
 void ne16_reset(void) {
   ne16_write32(NE16_CONTROL_BASE + NE16_SOFT_CLEAR, 0);
   ne16_memory_fence();
+  for (uint32_t settle = 0; settle < 4096u; ++settle) {
+    (void)ne16_status();
+  }
 }
 
 int ne16_scratchpad_write(uint32_t offset, const void *source, size_t size) {
