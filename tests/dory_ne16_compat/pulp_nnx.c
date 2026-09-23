@@ -76,6 +76,10 @@ int nnx_resolve_check(nnx_task_t *task) {
     }
     return 0;
   }
+  for (uint32_t settle = 0; settle < 1024u; ++settle) {
+    (void)ne16_status();
+  }
+  ne16_memory_fence();
   active = 0;
   ++stats.ne16_completion_count;
   printf("DORY NNX complete\n");
