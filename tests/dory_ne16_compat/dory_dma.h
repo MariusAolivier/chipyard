@@ -24,6 +24,7 @@ typedef struct DmaTransfer {
 } DmaTransfer;
 
 void dma_transfer_1d_async(DmaTransferConf conf);
+void dma_transfer_1d_async_ptr(const DmaTransferConf *conf);
 void dma_transfer_2d_async(DmaTransferConf conf);
 void dma_transfer_3d_async(DmaTransferConf conf);
 void dma_transfer_async(DmaTransferConf conf);

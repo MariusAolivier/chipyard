@@ -105,16 +105,20 @@ static int transfer_1d(uint32_t ext, uint32_t loc, int length, int dir) {
   return transfer(&conf, 1);
 }
 
-void dma_transfer_1d_async(DmaTransferConf conf) {
+void dma_transfer_1d_async_ptr(const DmaTransferConf *conf) {
   printf("DORY DMA wrapper begin\n");
   fflush(stdout);
   printf("DORY DMA wrapper args ext=0x%x loc=0x%x len=%d dir=%d\n",
-         conf.ext, conf.loc, conf.length_1d_copy, conf.dir);
+         conf->ext, conf->loc, conf->length_1d_copy, conf->dir);
   fflush(stdout);
-  int result = transfer_1d(conf.ext, conf.loc, conf.length_1d_copy, conf.dir);
+  int result =
+      transfer_1d(conf->ext, conf->loc, conf->length_1d_copy, conf->dir);
   printf("DORY DMA async returned result=%d\n", result);
   fflush(stdout);
   if (result != 0) remember_error(-40);
+}
+void dma_transfer_1d_async(DmaTransferConf conf) {
+  dma_transfer_1d_async_ptr(&conf);
 }
 void dma_transfer_2d_async(DmaTransferConf conf) {
   if (transfer(&conf, 0) != 0) remember_error(-41);
