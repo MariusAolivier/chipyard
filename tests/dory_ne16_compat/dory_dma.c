@@ -2,6 +2,7 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 
 #include "ne16_driver.h"
@@ -25,6 +26,9 @@ static int scratch_offset(uint32_t address, size_t length, uint32_t *offset) {
 }
 
 static int transfer(DmaTransferConf conf, int force_1d) {
+  printf("DORY DMA begin dir=%d ext=0x%x loc=0x%x len=%d\n", conf.dir,
+         conf.ext, conf.loc, conf.length_1d_copy);
+  fflush(stdout);
   if (conf.ext == 0 || conf.loc == 0 || conf.length_1d_copy <= 0 ||
       (conf.dir != DORY_DMA_DIR_LOC2EXT && conf.dir != DORY_DMA_DIR_EXT2LOC) ||
       conf.hwc_to_chw != 0) {
@@ -83,6 +87,8 @@ static int transfer(DmaTransferConf conf, int force_1d) {
   } else {
     dory_ne16_compat_note_dma_l1_to_l2();
   }
+  printf("DORY DMA end dir=%d\n", conf.dir);
+  fflush(stdout);
   return 0;
 }
 

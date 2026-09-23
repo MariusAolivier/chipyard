@@ -1,6 +1,8 @@
 #include "pulp_nnx.h"
 #include "ne16_driver.h"
 
+#include <stdio.h>
+
 _Static_assert(sizeof(nnx_task_t) == sizeof(ne16_task_t),
                "NNX and Chipyard descriptors must have identical ABI size");
 
@@ -25,6 +27,8 @@ void dory_ne16_compat_set_error(int error) {
 
 void nnx_init(uint32_t max_stall) {
   (void)max_stall;
+  printf("DORY NNX init\n");
+  fflush(stdout);
   active = 0;
   active_polls = 0;
 }
@@ -48,6 +52,8 @@ void nnx_dispatch_check_blocking(void) {
 }
 
 void nnx_dispatch_task(nnx_task_t *task) {
+  printf("DORY NNX dispatch\n");
+  fflush(stdout);
   if (task == NULL || !nnx_dispatch_check() || ne16_submit((ne16_task_t *)task) != 0) {
     dory_ne16_compat_set_error(-22);
     return;
@@ -58,6 +64,8 @@ void nnx_dispatch_task(nnx_task_t *task) {
 }
 
 int nnx_resolve_check(nnx_task_t *task) {
+  printf("DORY NNX resolve\n");
+  fflush(stdout);
   if (task == NULL || error_code != 0) return 0;
   if (!active) return 1;
   if (!ne16_idle()) {
@@ -70,6 +78,8 @@ int nnx_resolve_check(nnx_task_t *task) {
   }
   active = 0;
   ++stats.ne16_completion_count;
+  printf("DORY NNX complete\n");
+  fflush(stdout);
   return 1;
 }
 
