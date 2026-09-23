@@ -171,13 +171,16 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadHasData = scratchpadEdge.hasData(scratchpad.a.bits)
 
       val scratchpadReadPending = RegInit(false.B)
+      val scratchpadReadIssued = RegInit(false.B)
       val scratchpadReadRequest =
         RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
       val scratchpadReadBank0 = RegInit(0.U(bankIndexBits.W))
       val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
+      val scratchpadReadData =
+        RegInit(0.U((beatBytes * 8).W))
 
       val scratchpadReady =
-        !scratchpadReadPending && scratchpad.d.ready
+        !scratchpadReadPending && !scratchpadReadIssued && scratchpad.d.ready
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
@@ -197,7 +200,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       }
 
       when(scratchpadReadFire) {
-        scratchpadReadPending := true.B
+        scratchpadReadIssued := true.B
         scratchpadReadRequest := scratchpad.a.bits
         scratchpadReadBank0 := bankIndex(beatWordIndex)
         scratchpadReadBank1 := bankIndex(beatWordIndex + 1.U)
@@ -214,7 +217,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val tcdmRead = accelerator.io.tcdm_wen_o(0)
       val tcdmReadData = Wire(Vec(9, UInt(32.W)))
       val tcdmWordIndices = Wire(Vec(9, UInt(wordIndexBits.W)))
-      val tcdmGrant = !scratchpadFire && !scratchpadReadPending
+      val tcdmGrant = !scratchpadFire && !scratchpadReadIssued
       val tcdmAccepted =
         tcdmRequest && tcdmGrant
 
@@ -254,10 +257,12 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
 
       val scratchpadReadData0 = bankReadWords(scratchpadReadBank0)
       val scratchpadReadData1 = bankReadWords(scratchpadReadBank1)
-      scratchpad.d.bits.data := Mux(
-        scratchpadReadPending,
-        Cat(scratchpadReadData1, scratchpadReadData0),
-        0.U((beatBytes * 8).W))
+      when(scratchpadReadIssued) {
+        scratchpadReadIssued := false.B
+        scratchpadReadPending := true.B
+        scratchpadReadData := Cat(scratchpadReadData1, scratchpadReadData0)
+      }
+      scratchpad.d.bits.data := Mux(scratchpadReadPending, scratchpadReadData, 0.U((beatBytes * 8).W))
 
       for (lane <- 0 until 9) {
         val address = accelerator.io.tcdm_add_o(32 * (lane + 1) - 1, 32 * lane)
