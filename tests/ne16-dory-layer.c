@@ -105,56 +105,15 @@ static int fill_scratchpad(uint32_t offset, uint8_t value, size_t size) {
 }
 
 int main(void) {
-  printf("DORY layer init zero begin\n");
-  fflush(stdout);
-  if (fill_scratchpad(0, 0, 0x1000) != 0) {
-    printf("DORY layer init zero failed\n");
+  if (fill_scratchpad(0, 0, 0x1000) != 0 ||
+      ne16_scratchpad_write(INPUT_OFFSET, ne16_dory_input, NE16_DORY_INPUT_BYTES) != 0 ||
+      fill_scratchpad(OUTPUT_OFFSET, 0xa5, NE16_DORY_OUTPUT_BYTES) != 0 ||
+      ne16_scratchpad_write(WEIGHTS_OFFSET, ne16_dory_weights, NE16_DORY_WEIGHTS_BYTES) != 0 ||
+      ne16_scratchpad_write(SCALE_OFFSET, ne16_dory_scale, NE16_DORY_SCALE_BYTES) != 0 ||
+      ne16_scratchpad_write(BIAS_OFFSET, ne16_dory_bias, NE16_DORY_BIAS_BYTES) != 0) {
+    printf("DORY scratchpad initialization failed\n");
     return 1;
   }
-  printf("DORY layer init input begin\n");
-  fflush(stdout);
-  if (ne16_scratchpad_write(INPUT_OFFSET, ne16_dory_input,
-                            NE16_DORY_INPUT_BYTES) != 0) {
-    printf("DORY layer init input failed\n");
-    return 1;
-  }
-  printf("DORY layer init output begin\n");
-  fflush(stdout);
-  if (fill_scratchpad(OUTPUT_OFFSET, 0xa5, NE16_DORY_OUTPUT_BYTES) != 0) {
-    printf("DORY layer init output failed\n");
-    return 1;
-  }
-  printf("DORY layer init weights begin\n");
-  fflush(stdout);
-  for (size_t offset = 0; offset < NE16_DORY_WEIGHTS_BYTES; offset += 256u) {
-    size_t size = NE16_DORY_WEIGHTS_BYTES - offset;
-    if (size > 256u) size = 256u;
-    printf("DORY layer init weights chunk 0x%x begin\n", (unsigned)offset);
-    fflush(stdout);
-    if (ne16_scratchpad_write(WEIGHTS_OFFSET + (uint32_t)offset,
-                              ne16_dory_weights + offset, size) != 0) {
-      printf("DORY layer init weights chunk 0x%x failed\n", (unsigned)offset);
-      return 1;
-    }
-    printf("DORY layer init weights chunk 0x%x done\n", (unsigned)offset);
-    fflush(stdout);
-  }
-  printf("DORY layer init scale begin\n");
-  fflush(stdout);
-  if (ne16_scratchpad_write(SCALE_OFFSET, ne16_dory_scale,
-                            NE16_DORY_SCALE_BYTES) != 0) {
-    printf("DORY layer init scale failed\n");
-    return 1;
-  }
-  printf("DORY layer init bias begin\n");
-  fflush(stdout);
-  if (ne16_scratchpad_write(BIAS_OFFSET, ne16_dory_bias,
-                            NE16_DORY_BIAS_BYTES) != 0) {
-    printf("DORY layer init bias failed\n");
-    return 1;
-  }
-  printf("DORY layer init done\n");
-  fflush(stdout);
 
   if (check_round_trip() != 0) {
     return 1;

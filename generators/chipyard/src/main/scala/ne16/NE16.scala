@@ -188,8 +188,6 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
-      val scratchpadStallPrints = RegInit(0.U(8.W))
-      val scratchpadResponsePrints = RegInit(0.U(8.W))
 
       scratchpad.a.ready := scratchpadReady
       scratchpad.d.valid := scratchpadReadPending || scratchpadWritePending
@@ -198,17 +196,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       scratchpad.d.bits.opcode :=
         Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
 
-      when(scratchpad.a.valid && !scratchpadReady &&
-          scratchpadStallPrints =/= 255.U) {
-        printf(p"NE16 scratchpad A stalled address=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData dReady=${scratchpad.d.ready} readPending=$scratchpadReadPending\n")
-        scratchpadStallPrints := scratchpadStallPrints + 1.U
-      }
-
       when(scratchpadReadFire) {
-        when(scratchpadResponsePrints =/= 255.U) {
-          printf(p"NE16 scratchpad read fire address=0x${Hexadecimal(scratchpad.a.bits.address)} dReady=${scratchpad.d.ready}\n")
-          scratchpadResponsePrints := scratchpadResponsePrints + 1.U
-        }
         scratchpadReadPending := true.B
         scratchpadReadIssued := true.B
         scratchpadReadRequest := scratchpad.a.bits
@@ -226,18 +214,6 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         when(scratchpadWritePending) {
           scratchpadWritePending := false.B
         }
-        when(scratchpadResponsePrints =/= 255.U) {
-          val responseAddress =
-            Mux(scratchpadReadPending, scratchpadReadRequest.address,
-              scratchpadWriteRequest.address)
-          printf(p"NE16 scratchpad response fire address=0x${Hexadecimal(responseAddress)} read=$scratchpadReadPending issued=$scratchpadReadIssued\n")
-          scratchpadResponsePrints := scratchpadResponsePrints + 1.U
-        }
-      }
-      when(scratchpadReadPending && !scratchpad.d.ready &&
-          scratchpadResponsePrints =/= 255.U) {
-        printf(p"NE16 scratchpad response stalled address=0x${Hexadecimal(scratchpadReadRequest.address)} issued=$scratchpadReadIssued\n")
-        scratchpadResponsePrints := scratchpadResponsePrints + 1.U
       }
 
       scratchpad.b.valid := false.B

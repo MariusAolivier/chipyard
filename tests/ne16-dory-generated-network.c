@@ -5,7 +5,6 @@
 #include "BNReluConvolution0.h"
 #include "BNReluConvolution1.h"
 #include "BNReluConvolution2.h"
-#include "dory_dma.h"
 #include "dory_generated_network_data.h"
 #include "ne16_driver.h"
 #include "net_utils.h"
@@ -168,47 +167,6 @@ int main(void) {
          sizeof(layer2_weights));
   if (initialize_guards() != 0) return 1;
   ne16_reset();
-  printf("DORY raw DMA sequence input begin\n");
-  fflush(stdout);
-  uint32_t probe_input_ext;
-  if (pointer32(layer0_input, &probe_input_ext) != 0) return 1;
-  DmaTransferConf input_probe = {
-      .ext = probe_input_ext,
-      .loc = NE16_SCRATCH_BASE + 0x800u,
-      .stride_2d = 128,
-      .number_of_2d_copies = 8,
-      .stride_1d = 16,
-      .number_of_1d_copies = 8,
-      .length_1d_copy = 16,
-      .dir = DORY_DMA_DIR_EXT2LOC,
-  };
-  dma_transfer_async_ptr(&input_probe);
-  if (dory_ne16_compat_error() != 0) {
-    printf("DORY raw DMA sequence input failed\n");
-    return 1;
-  }
-  printf("DORY raw DMA sequence weight begin\n");
-  fflush(stdout);
-  if (ne16_scratchpad_write(0x1000u, layer0_weights,
-                            sizeof(layer0_weights)) != 0) {
-    printf("DORY raw DMA sequence weight failed\n");
-    return 1;
-  }
-  printf("DORY raw DMA sequence weight done\n");
-  fflush(stdout);
-  uint32_t probe_ext;
-  if (pointer32(layer0_weights, &probe_ext) != 0) return 1;
-  DmaTransferConf probe = {
-      .ext = probe_ext,
-      .loc = NE16_SCRATCH_BASE + 0x1000u,
-      .length_1d_copy = 2304,
-      .dir = DORY_DMA_DIR_EXT2LOC,
-  };
-  printf("DORY direct DMA wrapper probe begin\n");
-  fflush(stdout);
-  dma_transfer_1d_async_ptr(&probe);
-  printf("DORY direct DMA wrapper probe done\n");
-  fflush(stdout);
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
   if (run_layer("layer0", BNReluConvolution0, layer0_input, layer0_weights,

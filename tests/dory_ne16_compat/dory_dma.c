@@ -2,7 +2,6 @@
 
 #include <limits.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdint.h>
 
 #include "ne16_driver.h"
@@ -27,9 +26,6 @@ static int scratch_offset(uint32_t address, size_t length, uint32_t *offset) {
 
 static int transfer(const DmaTransferConf *conf_ptr, int force_1d) {
   DmaTransferConf conf = *conf_ptr;
-  printf("DORY DMA begin dir=%d ext=0x%x loc=0x%x len=%d\n", conf.dir,
-         conf.ext, conf.loc, conf.length_1d_copy);
-  fflush(stdout);
   if (conf.ext == 0 || conf.loc == 0 || conf.length_1d_copy <= 0 ||
       (conf.dir != DORY_DMA_DIR_LOC2EXT && conf.dir != DORY_DMA_DIR_EXT2LOC) ||
       conf.hwc_to_chw != 0) {
@@ -88,10 +84,6 @@ static int transfer(const DmaTransferConf *conf_ptr, int force_1d) {
   } else {
     dory_ne16_compat_note_dma_l1_to_l2();
   }
-  printf("DORY DMA end dir=%d\n", conf.dir);
-  fflush(stdout);
-  printf("DORY DMA transfer before return\n");
-  fflush(stdout);
   return 0;
 }
 
@@ -106,15 +98,8 @@ static int transfer_1d(uint32_t ext, uint32_t loc, int length, int dir) {
 }
 
 void dma_transfer_1d_async_ptr(const DmaTransferConf *conf) {
-  printf("DORY DMA wrapper begin\n");
-  fflush(stdout);
-  printf("DORY DMA wrapper args ext=0x%x loc=0x%x len=%d dir=%d\n",
-         conf->ext, conf->loc, conf->length_1d_copy, conf->dir);
-  fflush(stdout);
   int result =
       transfer_1d(conf->ext, conf->loc, conf->length_1d_copy, conf->dir);
-  printf("DORY DMA async returned result=%d\n", result);
-  fflush(stdout);
   if (result != 0) remember_error(-40);
 }
 void dma_transfer_1d_async(DmaTransferConf conf) {

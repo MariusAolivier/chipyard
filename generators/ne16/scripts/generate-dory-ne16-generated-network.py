@@ -139,14 +139,14 @@ def adapt_single_core_source(source):
         pointer_call = f"dma_transfer_async_ptr(&conf_{name});"
         if value_call in source:
             source = source.replace(value_call, pointer_call, 1)
+    source = source.replace(
+        "dma_transfer_async(store_conf[i_buff]);",
+        "dma_transfer_async_ptr(&store_conf[i_buff]);",
+    )
     for name in ("weights", "scale", "bias"):
         pointer_call = f"dma_transfer_1d_async_ptr(&conf_{name});"
         value_call = f"dma_transfer_1d_async(conf_{name});"
-        replacement = (
-            f'printf("DORY load {name} begin\\n"); fflush(stdout); '
-            f"dma_transfer_1d_async_ptr(&conf_{name}); "
-            f'printf("DORY load {name} returned\\n"); fflush(stdout);'
-        )
+        replacement = f"dma_transfer_1d_async_ptr(&conf_{name});"
         if pointer_call in source:
             source = source.replace(pointer_call, replacement, 1)
         elif value_call in source:
