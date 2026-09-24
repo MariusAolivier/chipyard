@@ -50,7 +50,7 @@ void nnx_dispatch_task_stride2x2(nnx_task_t *task, uint32_t w_in,
                                  uint32_t k_out_stride, uint8_t h_ker,
                                  uint8_t w_ker);
 
-#define DORY_NE16_MAX_POLL 1000000u
+#define DORY_NE16_MAX_POLL 4096u
 typedef struct {
   uint32_t dma_l2_to_l1_count;
   uint32_t dma_l1_to_l2_count;
