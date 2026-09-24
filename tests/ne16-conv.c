@@ -36,6 +36,7 @@ static int check_output(volatile const uint8_t *input,
 }
 
 int main(void) {
+  printf("NE16 convolution start\n");
   volatile uint8_t *input0 =
       (volatile uint8_t *)(NE16_SCRATCH_BASE + INPUT0_OFFSET);
   volatile uint8_t *input1 =
@@ -51,6 +52,7 @@ int main(void) {
     input0[i] = 1;
     input1[i] = 2;
   }
+  printf("NE16 convolution scratchpad initialized\n");
   for (int i = 0; i < 16; ++i) {
     weights[i] = 0;
   }
