@@ -172,7 +172,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
 
       val scratchpadReadPending = RegInit(false.B)
       val scratchpadReadIssued = RegInit(false.B)
+      val scratchpadWritePending = RegInit(false.B)
       val scratchpadReadRequest =
+        RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
+      val scratchpadWriteRequest =
         RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
       val scratchpadReadBank0 = RegInit(0.U(bankIndexBits.W))
       val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
@@ -181,15 +184,16 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadTrace = RegInit(0.U(8.W))
 
       val scratchpadReady =
-        !scratchpadReadPending && !scratchpadReadIssued && scratchpad.d.ready
+        !scratchpadReadPending && !scratchpadReadIssued &&
+          !scratchpadWritePending
       val scratchpadFire = scratchpad.a.valid && scratchpadReady
       val scratchpadReadFire = scratchpadFire && !scratchpadHasData
       val scratchpadWriteFire = scratchpadFire && scratchpadHasData
 
       scratchpad.a.ready := scratchpadReady
-      scratchpad.d.valid := scratchpadReadPending || scratchpadWriteFire
+      scratchpad.d.valid := scratchpadReadPending || scratchpadWritePending
       scratchpad.d.bits := scratchpadEdge.AccessAck(
-        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpad.a.bits))
+        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpadWriteRequest))
       scratchpad.d.bits.opcode :=
         Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
 
@@ -199,6 +203,18 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         scratchpadReadRequest := scratchpad.a.bits
         scratchpadReadBank0 := bankIndex(beatWordIndex)
         scratchpadReadBank1 := bankIndex(beatWordIndex + 1.U)
+      }
+      when(scratchpadWriteFire) {
+        scratchpadWritePending := true.B
+        scratchpadWriteRequest := scratchpad.a.bits
+      }
+      when(scratchpad.d.fire) {
+        when(scratchpadReadPending) {
+          scratchpadReadPending := false.B
+        }
+        when(scratchpadWritePending) {
+          scratchpadWritePending := false.B
+        }
       }
       when(scratchpadReadPending && scratchpad.d.fire) {
         scratchpadReadPending := false.B
@@ -261,7 +277,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         Cat(scratchpadReadData1, scratchpadReadData0),
         scratchpadReadData)
       when(scratchpad.a.fire && scratchpadTrace =/= 255.U) {
-        printf(p"NE16 scratchpad A fire addr=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData ready=${scratchpad.d.ready}\n")
+        printf(p"NE16 scratchpad A fire addr=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData\n")
         scratchpadTrace := scratchpadTrace + 1.U
       }
       when(scratchpad.a.valid && !scratchpad.a.ready &&
