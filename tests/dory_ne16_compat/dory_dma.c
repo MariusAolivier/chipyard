@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "ne16_driver.h"
 #include "pulp_nnx.h"
@@ -98,15 +99,26 @@ static int transfer_1d(uint32_t ext, uint32_t loc, int length, int dir) {
 }
 
 void dma_transfer_1d_async_ptr(const DmaTransferConf *conf) {
+  printf("DORY DMA 1D begin dir=%d ext=0x%x loc=0x%x len=%d\n", conf->dir,
+         conf->ext, conf->loc, conf->length_1d_copy);
+  fflush(stdout);
   int result =
       transfer_1d(conf->ext, conf->loc, conf->length_1d_copy, conf->dir);
+  printf("DORY DMA 1D end result=%d\n", result);
+  fflush(stdout);
   if (result != 0) remember_error(-40);
 }
 void dma_transfer_1d_async(DmaTransferConf conf) {
   dma_transfer_1d_async_ptr(&conf);
 }
 void dma_transfer_async_ptr(const DmaTransferConf *conf) {
+  printf("DORY DMA begin dir=%d ext=0x%x loc=0x%x n2d=%d n1d=%d len=%d\n",
+         conf->dir, conf->ext, conf->loc, conf->number_of_2d_copies,
+         conf->number_of_1d_copies, conf->length_1d_copy);
+  fflush(stdout);
   int result = transfer(conf, 0);
+  printf("DORY DMA end result=%d\n", result);
+  fflush(stdout);
   if (result != 0) remember_error(-43);
 }
 void dma_transfer_2d_async(DmaTransferConf conf) {

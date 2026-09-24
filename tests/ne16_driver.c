@@ -263,6 +263,8 @@ int ne16_submit(const ne16_task_t *task) {
   if (task == NULL) {
     return task == NULL ? -1 : -2;
   }
+  printf("NE16 submit begin\n");
+  fflush(stdout);
   uint32_t acquired = ne16_read32(NE16_CONTROL_BASE + NE16_ACQUIRE);
   if (acquired >= NE16_STATUS_FULL) return -2;
   submitted_task_id = (uint8_t)acquired;
@@ -272,7 +274,11 @@ int ne16_submit(const ne16_task_t *task) {
                  task->words[i]);
   }
   ne16_memory_fence();
+  printf("NE16 task registers programmed\n");
+  fflush(stdout);
   ne16_write32(NE16_CONTROL_BASE + NE16_TRIGGER, 0);
+  printf("NE16 trigger written\n");
+  fflush(stdout);
   task_submitted = 1;
   return 0;
 }

@@ -50,13 +50,19 @@ void nnx_dispatch_check_blocking(void) {
 }
 
 void nnx_dispatch_task(nnx_task_t *task) {
+  printf("DORY NE16 dispatch begin\n");
+  fflush(stdout);
   if (task == NULL || !nnx_dispatch_check() || ne16_submit((ne16_task_t *)task) != 0) {
     dory_ne16_compat_set_error(-22);
+    printf("DORY NE16 dispatch failed\n");
+    fflush(stdout);
     return;
   }
   active = 1;
   active_polls = 0;
   ++stats.ne16_dispatch_count;
+  printf("DORY NE16 dispatch end\n");
+  fflush(stdout);
 }
 
 int nnx_resolve_check(nnx_task_t *task) {
@@ -74,6 +80,8 @@ int nnx_resolve_check(nnx_task_t *task) {
   }
   active = 0;
   ++stats.ne16_completion_count;
+  printf("DORY NE16 completion\n");
+  fflush(stdout);
   return 1;
 }
 
