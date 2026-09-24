@@ -1,6 +1,8 @@
 #include "pulp_nnx.h"
 #include "ne16_driver.h"
 
+#include <stdio.h>
+
 _Static_assert(sizeof(nnx_task_t) == sizeof(ne16_task_t),
                "NNX and Chipyard descriptors must have identical ABI size");
 
@@ -64,6 +66,8 @@ int nnx_resolve_check(nnx_task_t *task) {
     if (++active_polls >= DORY_NE16_MAX_POLL) {
       active = 0;
       dory_ne16_compat_set_error(-32);
+      printf("DORY NE16 resolve timeout status=0x%x\n", ne16_status());
+      fflush(stdout);
       return 1;
     }
     return 0;
