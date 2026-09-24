@@ -257,6 +257,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val bankReadWords = Wire(Vec(bankCount, UInt(32.W)))
       val tcdmReadBanks =
         RegInit(VecInit(Seq.fill(9)(0.U(bankIndexBits.W))))
+      val tcdmTrace = RegInit(0.U(4.W))
 
       for (bank <- 0 until bankCount) {
         bankReadEnable(bank) := false.B
@@ -331,6 +332,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       }
 
       when(tcdmRequest) {
+        when(tcdmTrace < 8.U) {
+          printf(p"NE16 TCDM request add0=0x${Hexadecimal(accelerator.io.tcdm_add_o(31, 0))} add1=0x${Hexadecimal(accelerator.io.tcdm_add_o(63, 32))} add2=0x${Hexadecimal(accelerator.io.tcdm_add_o(95, 64))}\n")
+          tcdmTrace := tcdmTrace + 1.U
+        }
         assert(accelerator.io.tcdm_req_o.andR)
         assert(accelerator.io.tcdm_wen_o === Fill(9, tcdmRead))
       }
