@@ -27,6 +27,8 @@ void dory_ne16_compat_set_error(int error) {
 
 void nnx_init(uint32_t max_stall) {
   (void)max_stall;
+  printf("DORY NNX init\n");
+  fflush(stdout);
   active = 0;
   active_polls = 0;
 }

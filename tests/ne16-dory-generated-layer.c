@@ -119,7 +119,11 @@ int main(void) {
   };
   ne16_reset();
   dory_ne16_compat_reset_stats();
+  printf("%s function begin\n", LAYER_NAME);
+  fflush(stdout);
   LAYER_FUNCTION(&args);
+  printf("%s function end\n", LAYER_NAME);
+  fflush(stdout);
   if (dory_ne16_compat_error() != 0) {
     printf("%s reported adapter error %d\n", LAYER_NAME,
            dory_ne16_compat_error());

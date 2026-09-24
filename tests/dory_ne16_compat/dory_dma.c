@@ -139,6 +139,10 @@ void dma_transfer_wait(DmaTransfer transfer) {
   (void)transfer;
   if (pending_error != 0) dory_ne16_compat_set_error(pending_error);
 }
-void dma_mutex_init(void) { pending_error = 0; }
+void dma_mutex_init(void) {
+  printf("DORY DMA init\n");
+  fflush(stdout);
+  pending_error = 0;
+}
 void dma_mutex_lock(void) {}
 void dma_mutex_unlock(void) {}
