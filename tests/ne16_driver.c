@@ -55,12 +55,8 @@ void ne16_reset(void) {
   fflush(stdout);
   ne16_memory_fence();
   task_submitted = 0;
-  for (uint32_t settle = 0; settle < 4096u; ++settle) {
+  for (uint32_t settle = 0; settle < 256u; ++settle) {
     (void)ne16_status();
-    if ((settle & 0x3ffu) == 0x3ffu) {
-      printf("NE16 reset status progress %u\n", settle + 1u);
-      fflush(stdout);
-    }
   }
   printf("NE16 reset complete\n");
 }
