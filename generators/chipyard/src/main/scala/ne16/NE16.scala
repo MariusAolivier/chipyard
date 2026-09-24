@@ -14,7 +14,7 @@ import freechips.rocketchip.tilelink._
 
 case class NE16Params(
   controlAddress: BigInt = 0x10030000L,
-  scratchpadAddress: BigInt = 0x20000000L,
+  scratchpadAddress: BigInt = 0x10040000L,
   scratchpadBytes: Int = 64 * 1024
 ) {
   require(scratchpadBytes >= 4096)
