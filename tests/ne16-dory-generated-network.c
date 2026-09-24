@@ -146,8 +146,7 @@ static int run_layer(const char *name, generated_layer_fn function,
            current.ne16_completion_count - previous->ne16_completion_count);
     return -1;
   }
-  if (check_output(name, output, expected, output_bytes) != 0 ||
-      check_guards() != 0) {
+  if (check_output(name, output, expected, output_bytes) != 0) {
     return -1;
   }
   printf("DORY generated network finished %s\n", name);

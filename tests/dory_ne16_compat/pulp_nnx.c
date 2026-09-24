@@ -68,7 +68,6 @@ int nnx_resolve_check(nnx_task_t *task) {
     }
     return 0;
   }
-  ne16_memory_fence();
   active = 0;
   ++stats.ne16_completion_count;
   return 1;
