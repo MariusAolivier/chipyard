@@ -98,6 +98,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val controlState = RegInit(idle)
       val requestReg = Reg(chiselTypeOf(control.a.bits))
       val readDataReg = Reg(UInt(32.W))
+      val controlTraceCount = RegInit(0.U(4.W))
       val requestIsRead = requestReg.opcode === TLMessages.Get
       val upperWord = requestReg.address(2)
 
@@ -105,6 +106,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       when(control.a.fire) {
         requestReg := control.a.bits
         controlState := request
+        when(controlTraceCount < 12.U) {
+          printf("[NE16 CTRL A] opcode=%d address=%x\n",
+            control.a.bits.opcode, control.a.bits.address)
+          controlTraceCount := controlTraceCount + 1.U
+        }
       }
 
       accelerator.io.periph_req_i := controlState === request
@@ -117,6 +123,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         Mux(upperWord, requestReg.data(63, 32), requestReg.data(31, 0))
 
       when(controlState === request && accelerator.io.periph_gnt_o) {
+        when(controlTraceCount < 12.U) {
+          printf("[NE16 CTRL GNT] read=%d rvalid=%d\n",
+            requestIsRead, accelerator.io.periph_r_valid_o)
+          controlTraceCount := controlTraceCount + 1.U
+        }
         when(requestIsRead) {
           when(accelerator.io.periph_r_valid_o) {
             readDataReg := accelerator.io.periph_r_data_o
@@ -132,6 +143,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       when(controlState === readResponse && accelerator.io.periph_r_valid_o) {
         readDataReg := accelerator.io.periph_r_data_o
         controlState := tileLinkResponse
+        when(controlTraceCount < 12.U) {
+          printf("[NE16 CTRL RSP] data=%x\n", accelerator.io.periph_r_data_o)
+          controlTraceCount := controlTraceCount + 1.U
+        }
       }
 
       control.d.valid := controlState === tileLinkResponse
@@ -142,6 +157,10 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         Mux(upperWord, Cat(readDataReg, 0.U(32.W)), Cat(0.U(32.W), readDataReg))
       when(control.d.fire) {
         controlState := idle
+        when(controlTraceCount < 12.U) {
+          printf("[NE16 CTRL D]\n")
+          controlTraceCount := controlTraceCount + 1.U
+        }
       }
 
       control.b.valid := false.B
