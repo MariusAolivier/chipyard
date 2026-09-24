@@ -322,6 +322,12 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         }
 
         when(tcdmRequest) {
+          when(address < params.scratchpadAddress.U) {
+            printf(p"NE16 invalid TCDM address below base lane=$lane addr=0x${Hexadecimal(address)}\n")
+          }
+          when(address >= (params.scratchpadAddress + params.scratchpadBytes).U) {
+            printf(p"NE16 invalid TCDM address above limit lane=$lane addr=0x${Hexadecimal(address)}\n")
+          }
           assert(address >= params.scratchpadAddress.U)
           assert(address < (params.scratchpadAddress + params.scratchpadBytes).U)
         }
