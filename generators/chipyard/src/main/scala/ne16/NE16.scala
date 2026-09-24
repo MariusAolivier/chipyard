@@ -178,6 +178,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
       val scratchpadReadData =
         RegInit(0.U((beatBytes * 8).W))
+      val scratchpadTrace = RegInit(0.U(8.W))
 
       val scratchpadReady =
         !scratchpadReadPending && !scratchpadReadIssued && scratchpad.d.ready
@@ -259,6 +260,14 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         scratchpadReadIssued,
         Cat(scratchpadReadData1, scratchpadReadData0),
         scratchpadReadData)
+      when(scratchpad.a.fire && scratchpadTrace =/= 255.U) {
+        printf(p"NE16 scratchpad A fire addr=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData ready=${scratchpad.d.ready}\n")
+        scratchpadTrace := scratchpadTrace + 1.U
+      }
+      when(scratchpad.d.fire && scratchpadTrace =/= 255.U) {
+        printf(p"NE16 scratchpad D fire valid=${scratchpad.d.valid} read=$scratchpadReadPending\n")
+        scratchpadTrace := scratchpadTrace + 1.U
+      }
 
       for (lane <- 0 until 9) {
         val address = accelerator.io.tcdm_add_o(32 * (lane + 1) - 1, 32 * lane)
