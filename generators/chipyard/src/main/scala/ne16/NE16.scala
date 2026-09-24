@@ -264,6 +264,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         printf(p"NE16 scratchpad A fire addr=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData ready=${scratchpad.d.ready}\n")
         scratchpadTrace := scratchpadTrace + 1.U
       }
+      when(scratchpad.a.valid && !scratchpad.a.ready &&
+          scratchpadTrace =/= 255.U) {
+        printf(p"NE16 scratchpad A stalled addr=0x${Hexadecimal(scratchpad.a.bits.address)} hasData=$scratchpadHasData dReady=${scratchpad.d.ready} readPending=$scratchpadReadPending readIssued=$scratchpadReadIssued\n")
+        scratchpadTrace := scratchpadTrace + 1.U
+      }
       when(scratchpad.d.fire && scratchpadTrace =/= 255.U) {
         printf(p"NE16 scratchpad D fire valid=${scratchpad.d.valid} read=$scratchpadReadPending\n")
         scratchpadTrace := scratchpadTrace + 1.U
