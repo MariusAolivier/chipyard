@@ -110,7 +110,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       accelerator.io.periph_req_i := controlState === request
       accelerator.io.periph_add_i :=
         requestReg.address - params.controlAddress.U
-      accelerator.io.periph_wen_i := requestIsRead
+      accelerator.io.periph_wen_i := !requestIsRead
       accelerator.io.periph_be_i :=
         Mux(upperWord, requestReg.mask(7, 4), requestReg.mask(3, 0))
       accelerator.io.periph_data_i :=
