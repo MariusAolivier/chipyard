@@ -122,7 +122,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       accelerator.io.periph_data_i :=
         Mux(upperWord, requestReg.data(63, 32), requestReg.data(31, 0))
 
-      when(controlState === request && accelerator.io.periph_gnt_o) {
+      when(controlState === request) {
         when(controlTraceCount < 12.U) {
           printf("[NE16 CTRL GNT] read=%d rvalid=%d\n",
             requestIsRead, accelerator.io.periph_r_valid_o)
