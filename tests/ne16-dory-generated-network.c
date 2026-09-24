@@ -164,8 +164,8 @@ int main(void) {
          sizeof(layer1_weights));
   memcpy(layer2_weights, dory_BNReluConvolution2_parameters,
          sizeof(layer2_weights));
-  if (initialize_guards() != 0) return 1;
   ne16_reset();
+  if (initialize_guards() != 0) return 1;
   dory_ne16_compat_reset_stats();
   dory_ne16_stats_t previous = {0};
   if (run_layer("layer0", BNReluConvolution0, layer0_input, layer0_weights,
