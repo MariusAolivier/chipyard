@@ -266,6 +266,11 @@ int ne16_submit(const ne16_task_t *task) {
   printf("NE16 submit begin\n");
   fflush(stdout);
   uint32_t acquired = ne16_read32(NE16_CONTROL_BASE + NE16_ACQUIRE);
+  uint32_t status = ne16_read32(NE16_CONTROL_BASE + NE16_STATUS);
+  uint32_t running = ne16_read32(NE16_CONTROL_BASE + NE16_RUNNING_JOB);
+  printf("NE16 queue acquired=0x%x status=0x%x running=0x%x\n", acquired,
+         status, running);
+  fflush(stdout);
   if (acquired >= NE16_STATUS_FULL) return -2;
   submitted_task_id = (uint8_t)acquired;
 

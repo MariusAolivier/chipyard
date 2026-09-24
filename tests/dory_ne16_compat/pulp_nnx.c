@@ -68,7 +68,7 @@ void nnx_dispatch_task(nnx_task_t *task) {
 }
 
 int nnx_resolve_check(nnx_task_t *task) {
-  if (task == NULL || error_code != 0) return 0;
+  if (task == NULL || error_code != 0) return 1;
   if (!active) return 1;
   if (!ne16_idle()) {
     if (++active_polls >= DORY_NE16_MAX_POLL) {
