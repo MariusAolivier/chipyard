@@ -48,12 +48,18 @@ void ne16_memory_fence(void) {
 }
 
 void ne16_reset(void) {
+  printf("NE16 reset before soft clear\n");
   ne16_write32(NE16_CONTROL_BASE + NE16_SOFT_CLEAR, 0);
+  printf("NE16 reset after soft clear\n");
   ne16_memory_fence();
   task_submitted = 0;
   for (uint32_t settle = 0; settle < 4096u; ++settle) {
     (void)ne16_status();
+    if ((settle & 0x3ffu) == 0x3ffu) {
+      printf("NE16 reset status progress %u\n", settle + 1u);
+    }
   }
+  printf("NE16 reset complete\n");
 }
 
 int ne16_scratchpad_write(uint32_t offset, const void *source, size_t size) {
