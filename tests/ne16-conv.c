@@ -66,7 +66,9 @@ int main(void) {
   }
   ne16_memory_fence();
 
+  printf("NE16 convolution before reset\n");
   ne16_reset();
+  printf("NE16 convolution after reset\n");
   if (dispatch(NE16_SCRATCH_BASE + INPUT0_OFFSET,
                NE16_SCRATCH_BASE + WEIGHTS_OFFSET,
                NE16_SCRATCH_BASE + OUTPUT0_OFFSET) ||
