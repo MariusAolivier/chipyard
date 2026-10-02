@@ -124,6 +124,18 @@ target_include_directories(ne16-double-buffer BEFORE PRIVATE
     dory_ne16_compat
     ne16-dory-generated
     ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable(ne16-dory-tiled-layer
+    ne16-dory-tiled-layer.c
+    ne16_driver.c
+    ne16_dma.c
+    ne16_dory_layer_data.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/dory_dma.c
+    dory_ne16_compat/dory_pipeline.c
+    dory_ne16_compat/dory_tiled_layer.c)
+target_include_directories(ne16-dory-tiled-layer BEFORE PRIVATE
+    dory_ne16_compat
+    ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(symmetric symmetric.c)
 add_executable(ctc-test ctc-test.c)
 add_executable(multi-ctc-test multi-ctc-test.c)
@@ -173,6 +185,7 @@ add_dump_target(ne16-dory-generated-tile)
 add_dump_target(ne16-descriptor)
 add_dump_target(ne16-dma)
 add_dump_target(ne16-double-buffer)
+add_dump_target(ne16-dory-tiled-layer)
 
 
 # Add custom command to generate spiflash.img from spiflash.py

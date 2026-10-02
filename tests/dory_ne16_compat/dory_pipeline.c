@@ -21,14 +21,16 @@ static int within(dory_pipeline_memory_t memory, uint32_t address,
          (uint64_t)address + span <= (uint64_t)memory.base + memory.bytes;
 }
 
-static int valid_transfer(dory_pipeline_memory_t memory, DmaTransferConf c,
+static int valid_transfer(dory_pipeline_memory_t memory, ne16_dma_config_t c,
                           int direction) {
-  ne16_dma_config_t config;
-  if (c.dir != direction || dma_transfer_config(c, 0, &config) != 0) return 0;
-  uint64_t span = (uint64_t)(config.planes - 1u) * config.src_plane_stride +
-                  (uint64_t)(config.rows - 1u) * config.src_row_stride +
-                  config.line_bytes;
-  return within(memory, c.loc, span);
+  if (ne16_dma_validate(&c) != 0) return 0;
+  int load = direction == DORY_DMA_DIR_EXT2LOC;
+  uint32_t address = load ? c.dst : c.src;
+  uint32_t row_stride = load ? c.dst_row_stride : c.src_row_stride;
+  uint32_t plane_stride = load ? c.dst_plane_stride : c.src_plane_stride;
+  uint64_t span = (uint64_t)(c.planes - 1u) * plane_stride +
+                  (uint64_t)(c.rows - 1u) * row_stride + c.line_bytes;
+  return within(memory, address, span);
 }
 
 static int valid_job(dory_pipeline_slot_t *slot) {
@@ -85,7 +87,7 @@ static int enqueue_load(dory_pipeline_t *p, unsigned int index) {
     return pipeline_error(p, dory_ne16_compat_error());
   slot->state = DORY_SLOT_LOADING;
   for (unsigned int i = 0; i < slot->job.load_count; ++i) {
-    int result = dma_transfer_enqueue(slot->job.loads[i], 0);
+    int result = dma_transfer_enqueue_config(&slot->job.loads[i]);
     if (result != 0) return pipeline_error(p, result);
   }
   (void)dma_transfer_seal(slot->transfer);
@@ -159,7 +161,7 @@ int dory_pipeline_poll(dory_pipeline_t *p) {
       if (slot->transfer.id == 0)
         return pipeline_error(p, dory_ne16_compat_error());
       slot->state = DORY_SLOT_STORING;
-      result = dma_transfer_enqueue(slot->job.store, 0);
+      result = dma_transfer_enqueue_config(&slot->job.store);
       if (result != 0) return pipeline_error(p, result);
       (void)dma_transfer_seal(slot->transfer);
       progress = 1;

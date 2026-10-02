@@ -93,6 +93,10 @@ slot per cycle. A continuously eligible requester waits for at most two
 other grants; clients with a pending narrow response are not eligible.
 NE16 still receives either all nine grants or none, and accepted NE16 reads
 return all nine words on the next cycle, including back-to-back reads.
+Grants acknowledge accepted requests, not idle arbiter readiness: they are
+zero when NE16 has no request. PULP's HCI FIFO depends on this when it
+temporarily suppresses requests because its incoming FIFO is full; an
+unsolicited grant can otherwise discard a queued read and stall computation.
 
 CPU and DMA writes acknowledge on the next cycle. Their reads issue at
 cycle N, capture the synchronous SRAM output at the following edge, and
@@ -153,8 +157,12 @@ strided descriptor autonomously.
 `tests/dory_ne16_compat/dory_pipeline.h` provides a cooperative two-slot
 scheduler for a single Rocket core. A preparation callback supplies each
 job's NNX descriptor, input/weight/normalization transfers, and output
-transfer. Slots must be disjoint, fit in the scratchpad, and contain the
-job's complete footprint, including NE16 padding/realignment guards.
+transfer. Pipeline transfers use native `ne16_dma_config_t` descriptors with
+independent source/destination strides, admitted through
+`dma_transfer_enqueue_config`. The legacy generated `DmaTransferConf` API and
+its existing layout behavior remain unchanged. Slots must be disjoint, fit in the
+scratchpad, and contain the job's complete footprint, including NE16
+padding/realignment guards.
 
 The lifecycle is free -> loading -> ready -> computing -> storing -> free.
 Next-slot loads and previous-slot stores overlap computation; a slot cannot
@@ -168,6 +176,68 @@ runs workers sequentially; multi-tile generated worker functions must be
 adapted to the cooperative API rather than assuming parallel CPU workers.
 Dependent layers may only be scheduled after their input-producing output
 transfer has completed.
+
+## Complete multi-tile DORY-compatible layer
+
+`tests/dory_ne16_compat/dory_tiled_layer.h` adapts one complete HWC 3x3,
+stride-1, same-padded BN/ReLU convolution to the cooperative scheduler. It
+supports the proven uint8/packed-8-bit-weight, 16-input-channel, shift-11,
+weight-offset-minus-128 mode, with output channels in groups of 16.
+The weight blob contains all packed filters, followed by all int32 scales
+and then all int32 biases. Source, weight and destination tensors must be
+disjoint, stay in DRAM, and remain alive until completion or draining.
+
+Each job uses at most 12x12 output pixels and 16 output channels. Interior
+tiles load real one-pixel halos; only global image edges use NE16 padding.
+Unequal DMA row strides pack cropped inputs into local memory, and a 3D
+descriptor scatters packed output pixels into the full HWC destination.
+Both 16-KiB slots include prefix/read-ahead guards and cannot be reused
+before their output transfer finishes.
+
+`ne16-dory-tiled-layer` extends the committed DORY 32x32x16 fixture to one
+32x32x48 convolution by permuting complete filters and matching scale/bias
+entries into three output-channel groups. Its full 72,832 tensor bytes exceed
+the 65,536-byte scratchpad even without guards. It executes 27 jobs covering
+corners, edges, interior halos, and 8-pixel spatial tails. Every one of the
+49,152 output bytes is compared with the corresponding channel of DORY's
+original full-image reference; no tiled CPU kernel supplies the reference.
+The regression checks complete coverage, both-slot reuse, immutable sources,
+DRAM guards, all scratch bytes (including stale larger-tile tails), and actual
+DMA grants during NE16 execution.
+
+This is an explicit adaptation of a DORY-derived layer, not a newly generated
+upstream multi-worker function or automatic support for other operators.
+The imported generated source remains verbatim. Run the focused firmware with
+the same simulator as the baseline suite:
+
+```sh
+cmake -S tests -B tests/build -D CMAKE_BUILD_TYPE=Debug
+cmake --build tests/build --target ne16-dory-tiled-layer
+sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
+  +permissive +loadmem=tests/build/ne16-dory-tiled-layer.riscv \
+  +permissive-off tests/build/ne16-dory-tiled-layer.riscv
+```
+
+The canonical regression runner allows 90 minutes for this complete-image
+test and 30 minutes for each smaller test. `TIMEOUT` overrides both defaults;
+`TILED_TIMEOUT` overrides the complete-image limit specifically. Full scratch
+initialization/checking and repeated tiles are intentionally not skipped.
+
+The host suite checks all output-byte coverage and input-halo neighbors,
+192 geometry shapes, native DMA group lifetimes, unequal endpoint strides,
+and asynchronous scheduler timings:
+
+```sh
+python3 generators/ne16/scripts/test-dory-ne16-tiled-layer.py
+```
+
+It uses the actual DMA validator but constructor/transport mocks, so it does
+not replace the integrated simulator's numerical output and overlap checks.
+The same command maps the real scratch guard helper at its fixed address
+and checks all 65,536 individual byte corruptions and restorations, all 256
+fill values, adjacent word-boundary faults, and unaligned expected buffers.
+The helper compares complete 64-bit words on success and diagnoses individual
+bytes only on mismatch; no scratch bytes are omitted.
 
 Focused hardware tests can be run from the Chipyard root:
 

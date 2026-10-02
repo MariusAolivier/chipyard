@@ -56,6 +56,42 @@ class NE16ScratchpadSpec extends AnyFlatSpec {
 
   behavior of "NE16 whole-request scratchpad arbitration"
 
+  it should "never grant an absent NE16 request or suppress its outstanding response" in {
+    simulate(new NE16Scratchpad(params)) { dut =>
+      initialize(dut)
+      for (_ <- 0 until 3) {
+        dut.io.tcdmGrant.expect(0)
+        dut.io.grants(2).expect(false.B)
+        dut.io.tcdmResponseValid.expect(0)
+        dut.clock.step()
+      }
+      for (client <- 0 until 2) {
+        dut.io.request(client).bits.write.poke(true.B)
+        dut.io.request(client).valid.poke(true.B)
+      }
+      var previousRead = false
+      for (cycle <- 0 until 40) {
+        val request = cycle % 4 < 2
+        dut.io.tcdmRequest.poke((if (request) 511 else 0).U)
+        val accepted = dut.io.grants(2).peek().litToBoolean
+        assert(!accepted || request)
+        dut.io.tcdmGrant.expect((if (accepted) 511 else 0).U)
+        dut.io.tcdmResponseValid.expect((if (previousRead) 511 else 0).U)
+        dut.clock.step()
+        previousRead = accepted
+      }
+      for (client <- 0 until 2) dut.io.request(client).valid.poke(false.B)
+      dut.io.tcdmRequest.poke(511.U)
+      dut.io.tcdmGrant.expect(511)
+      dut.clock.step()
+      dut.io.tcdmRequest.poke(0.U)
+      dut.io.tcdmGrant.expect(0)
+      dut.io.tcdmResponseValid.expect(511)
+      dut.clock.step()
+      dut.io.tcdmResponseValid.expect(0)
+    }
+  }
+
   it should "rotate fairly across CPU, DMA, and all nine NE16 lanes" in {
     simulate(new NE16Scratchpad(params)) { dut =>
       initialize(dut)

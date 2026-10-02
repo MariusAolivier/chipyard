@@ -17,9 +17,9 @@ typedef struct {
 
 typedef struct {
   nnx_task_t task;
-  DmaTransferConf loads[DORY_PIPELINE_MAX_LOADS];
+  ne16_dma_config_t loads[DORY_PIPELINE_MAX_LOADS];
   unsigned int load_count;
-  DmaTransferConf store;
+  ne16_dma_config_t store;
 } dory_pipeline_job_t;
 
 typedef int (*dory_pipeline_prepare_t)(void *context, uint32_t job_index,
@@ -51,6 +51,7 @@ typedef struct {
 /* One core/one pipeline owns NNX + DMA. Caller initializes NNX and DMA first.
  * Two disjoint scratch allocations INCLUDE all padding/read-ahead guards.
  * prepare only builds a descriptor/configs (no MMIO or queue operations).
+ * DMA configs are native descriptors with independent endpoint strides.
  * All local DMA spans and task pointers must belong to the supplied slot;
  * caller guarantees the entire NE16 access footprint incl wide padding reads
  * fits it, with nonoverlapping live input/output/weights/norm regions.

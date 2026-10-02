@@ -30,7 +30,8 @@ typedef struct DmaTransfer {
 
 /* Single Rocket-core cooperative queue, no CPU-copy backend. Counts/strides
  * equal to zero mean the generated DORY 1D defaults; negatives are invalid.
- * Both endpoints retain the historical identical row/plane layout.
+ * Legacy DmaTransferConf retains the identical endpoint row/plane layout;
+ * native enqueue_config supports independently packed endpoint strides.
  * create selects a group; enqueue/async append to that group. A new create,
  * seal, poll or wait freezes its watermark. Poll waits for ALL its configs,
  * never for later groups. Queue-full is explicit backpressure, not a retry.
@@ -49,6 +50,9 @@ typedef struct DmaTransfer {
 int dma_transfer_config(DmaTransferConf conf, int force_1d,
                         ne16_dma_config_t *config);
 int dma_transfer_enqueue(DmaTransferConf conf, int force_1d);
+/* Native descriptors support independently packed local/external layouts,
+ * with the same group ownership, watermarks and error handling as enqueue. */
+int dma_transfer_enqueue_config(const ne16_dma_config_t *config);
 int dma_transfer_seal(DmaTransfer transfer);
 int dma_transfer_service(void);
 int dma_transfer_idle(void);

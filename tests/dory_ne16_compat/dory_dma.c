@@ -113,26 +113,47 @@ int dma_transfer_service(void) {
   return count == 0 ? 1 : 0;
 }
 
-int dma_transfer_enqueue(DmaTransferConf conf, int force_1d) {
+static int check_enqueue_group(void) {
   if (current_group < 0 || !groups[current_group].live ||
       groups[current_group].sealed) return enqueue_error(DORY_DMA_EHANDLE);
   if (groups[current_group].error != 0)
     return fail(groups[current_group].error);
-  ne16_dma_config_t config;
-  int result = dma_transfer_config(conf, force_1d, &config);
-  if (result != 0) return enqueue_error(result);
+  return 0;
+}
+
+static int enqueue_config(const ne16_dma_config_t *config, int direction) {
   if (count == DORY_DMA_QUEUE_CAPACITY) return enqueue_error(DORY_DMA_EFULL);
   if (submitted == UINT64_MAX) return enqueue_error(DORY_DMA_EFULL);
   queue[(head + count) % DORY_DMA_QUEUE_CAPACITY] = (queued_dma_t){
-      .config = config, .sequence = ++submitted, .direction = conf.dir};
+      .config = *config, .sequence = ++submitted, .direction = direction};
   ++count;
   groups[current_group].last = submitted;
   /* Start only: later descriptors are pumped by service/poll/wait. */
   if (!active) {
-    result = dma_transfer_service();
+    int result = dma_transfer_service();
     if (result < 0) return enqueue_error(result);
   }
   return 0;
+}
+
+int dma_transfer_enqueue(DmaTransferConf conf, int force_1d) {
+  int result = check_enqueue_group();
+  if (result != 0) return result;
+  ne16_dma_config_t config;
+  result = dma_transfer_config(conf, force_1d, &config);
+  if (result != 0) return enqueue_error(result);
+  return enqueue_config(&config, conf.dir);
+}
+
+int dma_transfer_enqueue_config(const ne16_dma_config_t *config) {
+  int result = check_enqueue_group();
+  if (result != 0) return result;
+  result = ne16_dma_validate(config);
+  if (result != 0) return enqueue_error(result);
+  int direction = config->src >= NE16_SCRATCH_BASE &&
+                  config->src < NE16_SCRATCH_BASE + NE16_SCRATCH_BYTES
+                      ? DORY_DMA_DIR_LOC2EXT : DORY_DMA_DIR_EXT2LOC;
+  return enqueue_config(config, direction);
 }
 
 void dma_transfer_1d_async(DmaTransferConf c) {

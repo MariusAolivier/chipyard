@@ -6,6 +6,7 @@
 #include "dory_generated_tile_data.h"
 #include "ne16_dma.h"
 #include "ne16_driver.h"
+#include "ne16_test_scratch.h"
 
 #define JOBS 6u
 #define SLOT_BYTES (16u * 1024u)
@@ -20,9 +21,6 @@ _Static_assert(BIAS_OFFSET + 64u < SLOT_BYTES, "slot footprint exceeds allocatio
 _Static_assert(DORY_TILE_INPUT_BYTES == 1024 &&
                DORY_TILE_OUTPUT_BYTES == 1024 &&
                DORY_TILE_WEIGHTS_BYTES == 2432, "unexpected DORY fixture");
-_Static_assert(NE16_SCRATCH_BASE % sizeof(uint64_t) == 0 &&
-               NE16_SCRATCH_BYTES % sizeof(uint64_t) == 0,
-               "scratch guard I/O requires aligned whole words");
 
 typedef struct {
   uint8_t prefix[64];
@@ -46,30 +44,6 @@ typedef struct {
 
 static fixture_context_t context;
 
-static void initialize_scratch(volatile uint64_t *scratch) {
-  const uint64_t guard = UINT64_C(0x0101010101010101) * SENTINEL;
-  for (uint32_t i = 0; i < NE16_SCRATCH_BYTES / sizeof(*scratch); ++i)
-    scratch[i] = guard;
-  ne16_memory_fence();
-}
-
-static int check_scratch_bytes(const volatile uint64_t *scratch) {
-  ne16_memory_fence();
-  for (uint32_t i = 0; i < NE16_SCRATCH_BYTES; i += sizeof(uint64_t)) {
-    const uint64_t word = scratch[i / sizeof(word)];
-    for (uint32_t byte = 0; byte < sizeof(word); ++byte) {
-      uint8_t actual = (uint8_t)(word >> (byte * 8u));
-      if (actual != scratch_expected[i + byte]) {
-        printf("pipeline scratch data/guard mismatch at 0x%x: %u expected %u\n",
-               i + byte, actual, scratch_expected[i + byte]);
-        return -1;
-      }
-    }
-  }
-  ne16_memory_fence();
-  return 0;
-}
-
 static int pointer32(const void *p, uint32_t *address) {
   uintptr_t value = (uintptr_t)p;
   if (value < UINT32_C(0x80000000) || value > UINT32_MAX) return -1;
@@ -77,10 +51,10 @@ static int pointer32(const void *p, uint32_t *address) {
   return 0;
 }
 
-static DmaTransferConf load_conf(uint32_t ext, uint32_t loc, int bytes) {
-  return (DmaTransferConf){.ext = ext, .loc = loc,
-                           .length_1d_copy = bytes,
-                           .dir = DORY_DMA_DIR_EXT2LOC};
+static ne16_dma_config_t load_conf(uint32_t ext, uint32_t loc, int bytes) {
+  return (ne16_dma_config_t){.src = ext, .dst = loc,
+                             .line_bytes = (uint32_t)bytes,
+                             .rows = 1, .planes = 1};
 }
 
 static int prepare(void *arg, uint32_t index, unsigned int slot,
@@ -107,9 +81,9 @@ static int prepare(void *arg, uint32_t index, unsigned int slot,
   job->loads[1] = load_conf(c->weights_ptr[index], config.weights, 2304);
   job->loads[2] = load_conf(c->weights_ptr[index] + 2304, config.scale, 64);
   job->loads[3] = load_conf(c->weights_ptr[index] + 2368, config.bias, 64);
-  job->store = (DmaTransferConf){
-      .ext = c->output_ptr[index], .loc = config.output,
-      .length_1d_copy = DORY_TILE_OUTPUT_BYTES, .dir = DORY_DMA_DIR_LOC2EXT};
+  job->store = (ne16_dma_config_t){
+      .src = config.output, .dst = c->output_ptr[index],
+      .line_bytes = DORY_TILE_OUTPUT_BYTES, .rows = 1, .planes = 1};
   ++c->slot_uses[slot];
   c->last_job[slot] = index;
   ++c->prepared;
@@ -148,7 +122,7 @@ static int initialize_fixture(void) {
         pointer32(outputs[job].data, &context.output_ptr[job]) != 0) return -1;
   }
   memset(scratch_expected, SENTINEL, sizeof(scratch_expected));
-  initialize_scratch((volatile uint64_t *)(uintptr_t)NE16_SCRATCH_BASE);
+  ne16_test_fill_scratch(SENTINEL);
   return 0;
 }
 
@@ -184,8 +158,7 @@ static int check_scratch(const dory_pipeline_memory_t memory[2]) {
     memcpy(scratch_expected + offset + OUTPUT_OFFSET, references[last],
            sizeof(references[last]));
   }
-  return check_scratch_bytes(
-      (const volatile uint64_t *)(uintptr_t)NE16_SCRATCH_BASE);
+  return ne16_test_check_scratch(scratch_expected);
 }
 
 int main(void) {

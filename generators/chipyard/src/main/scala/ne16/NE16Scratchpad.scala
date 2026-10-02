@@ -83,7 +83,7 @@ class NE16Scratchpad(params: NE16Params) extends Module {
   arbiter.io.in(2).bits.mask := io.tcdmMask
   arbiter.io.in(2).bits.wide := true.B
   arbiter.io.out.ready := true.B
-  io.tcdmGrant := Fill(9, arbiter.io.in(2).ready)
+  io.tcdmGrant := Fill(9, arbiter.io.in(2).fire)
   io.grants := VecInit(arbiter.io.in.map(_.fire))
   io.contention := PopCount(VecInit(arbiter.io.in.map(_.valid))) > 1.U
 
