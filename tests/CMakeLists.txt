@@ -91,6 +91,7 @@ add_executable(ne16-descriptor ne16-descriptor.c ne16_driver.c)
 add_executable(ne16-dma
     ne16-dma.c
     ne16_driver.c
+    ne16_dma.c
     dory_ne16_compat/pulp_nnx.c
     dory_ne16_compat/dory_dma.c)
 target_include_directories(ne16-dma BEFORE PRIVATE
@@ -99,6 +100,7 @@ target_include_directories(ne16-dma BEFORE PRIVATE
 add_executable(ne16-dory-generated-tile
     ne16-dory-generated-tile.c
     ne16_driver.c
+    ne16_dma.c
     dory_ne16_compat/pulp_nnx.c
     dory_ne16_compat/pulp_nnx_util.c
     dory_ne16_compat/dory_dma.c
@@ -110,6 +112,18 @@ target_include_directories(ne16-dory-generated-tile BEFORE PRIVATE
     ne16-dory-generated
     ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(ne16-dory-generated-tile PRIVATE -include stdio.h)
+add_executable(ne16-double-buffer
+    ne16-double-buffer.c
+    ne16_driver.c
+    ne16_dma.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/dory_dma.c
+    dory_ne16_compat/dory_pipeline.c
+    ne16-dory-generated/dory_generated_tile_data.c)
+target_include_directories(ne16-double-buffer BEFORE PRIVATE
+    dory_ne16_compat
+    ne16-dory-generated
+    ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(symmetric symmetric.c)
 add_executable(ctc-test ctc-test.c)
 add_executable(multi-ctc-test multi-ctc-test.c)
@@ -158,6 +172,7 @@ add_dump_target(triple-chiplet)
 add_dump_target(ne16-dory-generated-tile)
 add_dump_target(ne16-descriptor)
 add_dump_target(ne16-dma)
+add_dump_target(ne16-double-buffer)
 
 
 # Add custom command to generate spiflash.img from spiflash.py

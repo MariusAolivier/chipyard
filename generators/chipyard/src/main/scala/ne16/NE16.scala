@@ -1,25 +1,29 @@
 package chipyard.ne16
 
 import chisel3._
-import chisel3.experimental.IntParam
 import chisel3.util._
 
 import org.chipsalliance.cde.config.{Config, Field, Parameters}
 
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.prci._
+import freechips.rocketchip.regmapper.{RegField, RegReadFn, RegWriteFn}
 import freechips.rocketchip.resources.{MemoryDevice, SimpleDevice}
-import freechips.rocketchip.subsystem.{BaseSubsystem, PBUS}
+import freechips.rocketchip.subsystem.{BaseSubsystem, FBUS, PBUS}
 import freechips.rocketchip.tilelink._
 
 case class NE16Params(
   controlAddress: BigInt = 0x10030000L,
   scratchpadAddress: BigInt = 0x20000000L,
-  scratchpadBytes: Int = 64 * 1024
+  scratchpadBytes: Int = 64 * 1024,
+  dmaAddress: BigInt = 0x10031000L
 ) {
   require(scratchpadBytes >= 4096)
   require((scratchpadBytes & (scratchpadBytes - 1)) == 0)
   require(scratchpadAddress + scratchpadBytes <= (BigInt(1) << 32))
+  require((scratchpadAddress & (scratchpadBytes - 1)) == 0)
+  require((controlAddress & 0xfff) == 0 && (dmaAddress & 0xfff) == 0)
+  require(controlAddress != dmaAddress)
 }
 
 case object NE16Key extends Field[Option[NE16Params]](None)
@@ -57,9 +61,17 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
     extends ClockSinkDomain(ClockSinkParameters())(p) {
   require(beatBytes == 8, "NE16 integration currently requires a 64-bit peripheral bus")
 
-  private val controlDevice =
-    new SimpleDevice("ne16", Seq("pulp-platform,ne16"))
+  private val controlDevice = new SimpleDevice("ne16", Seq("pulp-platform,ne16"))
   private val scratchpadDevice = new MemoryDevice
+  private val dmaDevice = new SimpleDevice("ne16-dma", Seq("chipyard,ne16-dma"))
+
+  val dmaControlNode = TLRegisterNode(
+    address = Seq(AddressSet(params.dmaAddress, 0xfff)),
+    device = dmaDevice,
+    beatBytes = beatBytes,
+    concurrency = 1)
+  val dmaMemoryNode = TLClientNode(Seq(TLMasterPortParameters.v1(
+    Seq(TLMasterParameters.v1(name = "ne16-dma", sourceId = IdRange(0, 1))))))
 
   val controlNode = TLManagerNode(Seq(TLSlavePortParameters.v1(
     managers = Seq(TLSlaveParameters.v1(
@@ -108,8 +120,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       }
 
       accelerator.io.periph_req_i := controlState === request
-      accelerator.io.periph_add_i :=
-        requestReg.address - params.controlAddress.U
+      accelerator.io.periph_add_i := requestReg.address - params.controlAddress.U
       accelerator.io.periph_wen_i := requestIsRead
       accelerator.io.periph_be_i :=
         Mux(upperWord, requestReg.mask(7, 4), requestReg.mask(3, 0))
@@ -128,209 +139,108 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
           controlState := tileLinkResponse
         }
       }
-
       when(controlState === readResponse && accelerator.io.periph_r_valid_o) {
         readDataReg := accelerator.io.periph_r_data_o
         controlState := tileLinkResponse
       }
-
       control.d.valid := controlState === tileLinkResponse
       control.d.bits := controlEdge.AccessAck(requestReg)
       control.d.bits.opcode :=
         Mux(requestIsRead, TLMessages.AccessAckData, TLMessages.AccessAck)
       control.d.bits.data :=
         Mux(upperWord, Cat(readDataReg, 0.U(32.W)), Cat(0.U(32.W), readDataReg))
-      when(control.d.fire) {
-        controlState := idle
-      }
-
+      when(control.d.fire) { controlState := idle }
       control.b.valid := false.B
       control.c.ready := true.B
       control.e.ready := true.B
 
-      val words = params.scratchpadBytes / 4
-      val wordIndexBits = log2Ceil(words)
-      val bankCount = 9
-      val bankIndexBits = log2Ceil(bankCount)
-      val rowsPerBank = (words + bankCount - 1) / bankCount
-      val rowIndexBits = log2Ceil(rowsPerBank)
-      val memory = Seq.fill(bankCount) {
-        SyncReadMem(rowsPerBank, Vec(4, UInt(8.W)))
-      }
-
-      def bankIndex(wordIndex: UInt): UInt = wordIndex % bankCount.U
-      def rowIndex(wordIndex: UInt): UInt = wordIndex / bankCount.U
-
+      val storage = Module(new NE16Scratchpad(params))
       val (scratchpad, scratchpadEdge) = scratchpadNode.in.head
-      val scratchpadOffset =
-        scratchpad.a.bits.address - params.scratchpadAddress.U
-      val beatWordIndex =
-        Cat(scratchpadOffset(log2Ceil(params.scratchpadBytes) - 1, 3), 0.U(1.W))
-      val scratchpadWriteData =
-        scratchpad.a.bits.data.asTypeOf(Vec(beatBytes, UInt(8.W)))
-      val scratchpadHasData = scratchpadEdge.hasData(scratchpad.a.bits)
-
-      val scratchpadReadPending = RegInit(false.B)
-      val scratchpadReadRequest =
-        RegInit(0.U.asTypeOf(chiselTypeOf(scratchpad.a.bits)))
-      val scratchpadReadBank0 = RegInit(0.U(bankIndexBits.W))
-      val scratchpadReadBank1 = RegInit(0.U(bankIndexBits.W))
-
-      val scratchpadReady =
-        !scratchpadReadPending && scratchpad.d.ready
-      val scratchpadFire = scratchpad.a.valid && scratchpadReady
-      val scratchpadReadFire = scratchpadFire && !scratchpadHasData
-      val scratchpadWriteFire = scratchpadFire && scratchpadHasData
-
-      scratchpad.a.ready := scratchpadReady
-      scratchpad.d.valid := scratchpadReadPending || scratchpadWriteFire
-      scratchpad.d.bits := scratchpadEdge.AccessAck(
-        Mux(scratchpadReadPending, scratchpadReadRequest, scratchpad.a.bits))
+      val scratchpadRequest = Reg(chiselTypeOf(scratchpad.a.bits))
+      storage.io.request(0).valid := scratchpad.a.valid
+      storage.io.request(0).bits.address := scratchpad.a.bits.address
+      storage.io.request(0).bits.write := scratchpadEdge.hasData(scratchpad.a.bits)
+      storage.io.request(0).bits.data := scratchpad.a.bits.data
+      storage.io.request(0).bits.mask := scratchpad.a.bits.mask
+      scratchpad.a.ready := storage.io.request(0).ready
+      when(scratchpad.a.fire) { scratchpadRequest := scratchpad.a.bits }
+      val scratchpadRead = scratchpadRequest.opcode === TLMessages.Get
+      scratchpad.d.valid := storage.io.response(0).valid
+      scratchpad.d.bits := scratchpadEdge.AccessAck(scratchpadRequest)
       scratchpad.d.bits.opcode :=
-        Mux(scratchpadReadPending, TLMessages.AccessAckData, TLMessages.AccessAck)
-
-      when(scratchpadReadFire) {
-        scratchpadReadPending := true.B
-        scratchpadReadRequest := scratchpad.a.bits
-        scratchpadReadBank0 := bankIndex(beatWordIndex)
-        scratchpadReadBank1 := bankIndex(beatWordIndex + 1.U)
-      }
-      when(scratchpadReadPending && scratchpad.d.fire) {
-        scratchpadReadPending := false.B
-      }
-
+        Mux(scratchpadRead, TLMessages.AccessAckData, TLMessages.AccessAck)
+      scratchpad.d.bits.data := storage.io.response(0).bits
+      storage.io.response(0).ready := scratchpad.d.ready
       scratchpad.b.valid := false.B
       scratchpad.c.ready := true.B
       scratchpad.e.ready := true.B
 
-      val tcdmRequest = accelerator.io.tcdm_req_o.orR
-      val tcdmRead = accelerator.io.tcdm_wen_o(0)
-      val tcdmReadData = Wire(Vec(9, UInt(32.W)))
-      val tcdmWordIndices = Wire(Vec(9, UInt(wordIndexBits.W)))
-      val tcdmGrant = !scratchpadFire && !scratchpadReadPending
-      val tcdmAccepted =
-        tcdmRequest && tcdmGrant
+      storage.io.tcdmRequest := accelerator.io.tcdm_req_o
+      storage.io.tcdmAddresses := accelerator.io.tcdm_add_o
+      storage.io.tcdmRead := accelerator.io.tcdm_wen_o
+      storage.io.tcdmData := accelerator.io.tcdm_data_o
+      storage.io.tcdmMask := accelerator.io.tcdm_be_o
+      accelerator.io.tcdm_gnt_i := storage.io.tcdmGrant
+      accelerator.io.tcdm_r_data_i := storage.io.tcdmResponse
+      accelerator.io.tcdm_r_valid_i := storage.io.tcdmResponseValid
 
-      val bankReadEnable = Wire(Vec(bankCount, Bool()))
-      val bankReadRow = Wire(Vec(bankCount, UInt(rowIndexBits.W)))
-      val bankReadData = Wire(Vec(bankCount, Vec(4, UInt(8.W))))
-      val bankReadWords = Wire(Vec(bankCount, UInt(32.W)))
-      val tcdmReadBanks =
-        RegInit(VecInit(Seq.fill(9)(0.U(bankIndexBits.W))))
+      val (dmaMemory, dmaEdge) = dmaMemoryNode.out.head
+      val dma = Module(new NE16DMA(params, dmaEdge))
+      dmaMemory <> dma.io.memory
+      storage.io.request(1) <> dma.io.scratchpad
+      dma.io.scratchpadResponse <> storage.io.response(1)
+      val dmaConfig = RegInit(0.U.asTypeOf(new NE16DMAConfig))
+      dma.io.command.bits := dmaConfig
+      dma.io.command.valid := false.B
+      dma.io.acknowledge := false.B
 
-      for (bank <- 0 until bankCount) {
-        bankReadEnable(bank) := false.B
-        bankReadRow(bank) := 0.U
-
-        when(scratchpadReadFire && bankIndex(beatWordIndex) === bank.U) {
-          bankReadEnable(bank) := true.B
-          bankReadRow(bank) := rowIndex(beatWordIndex)
-        }
-        when(scratchpadReadFire && bankIndex(beatWordIndex + 1.U) === bank.U) {
-          bankReadEnable(bank) := true.B
-          bankReadRow(bank) := rowIndex(beatWordIndex + 1.U)
-        }
-
-        for (lane <- 0 until 9) {
-          when(tcdmAccepted && tcdmRead &&
-              bankIndex(tcdmWordIndices(lane)) === bank.U) {
-            bankReadEnable(bank) := true.B
-            bankReadRow(bank) := rowIndex(tcdmWordIndices(lane))
-          }
-        }
-
-        bankReadData(bank) := memory(bank).read(
-          bankReadRow(bank),
-          bankReadEnable(bank))
-        bankReadWords(bank) := Cat(bankReadData(bank).reverse)
+      def configField(value: UInt): RegField = RegField(32,
+        RegReadFn(value), RegWriteFn((valid: Bool, data: UInt) => {
+          when(valid && !dma.io.busy) { value := data }
+          !dma.io.busy
+        }))
+      def commandWrite(valid: Bool, bits: UInt): Bool = {
+        dma.io.command.valid := valid && bits(0)
+        dma.io.acknowledge := valid && bits(1) && !dma.io.busy
+        dma.io.command.ready
       }
-
-      val scratchpadReadData0 = bankReadWords(scratchpadReadBank0)
-      val scratchpadReadData1 = bankReadWords(scratchpadReadBank1)
-      scratchpad.d.bits.data := Mux(
-        scratchpadReadPending,
-        Cat(scratchpadReadData1, scratchpadReadData0),
-        0.U((beatBytes * 8).W))
-
-      for (lane <- 0 until 9) {
-        val address = accelerator.io.tcdm_add_o(32 * (lane + 1) - 1, 32 * lane)
-        val offset = address - params.scratchpadAddress.U
-        tcdmWordIndices(lane) :=
-          offset(log2Ceil(params.scratchpadBytes) - 1, 2)
-        tcdmReadData(lane) := bankReadWords(tcdmReadBanks(lane))
-
-        when(tcdmAccepted && tcdmRead) {
-          tcdmReadBanks(lane) := bankIndex(tcdmWordIndices(lane))
-        }
-
-        when(tcdmRequest) {
-          assert(address >= params.scratchpadAddress.U)
-          assert(address < (params.scratchpadAddress + params.scratchpadBytes).U)
-        }
-
-        when(tcdmAccepted) {
-          assert(tcdmWordIndices(lane) === tcdmWordIndices(0) + lane.U)
-        }
+      val status = Cat(0.U(29.W), dma.io.error =/= 0.U, dma.io.done, dma.io.busy)
+      val grants = RegInit(VecInit(Seq.fill(3)(0.U(32.W))))
+      val contention = RegInit(0.U(32.W))
+      val dmaOverlap = RegInit(0.U(32.W))
+      for (client <- 0 until 3) {
+        when(storage.io.grants(client)) { grants(client) := grants(client) + 1.U }
       }
-
-      when(tcdmRequest) {
-        assert(accelerator.io.tcdm_req_o.andR)
-        assert(accelerator.io.tcdm_wen_o === Fill(9, tcdmRead))
+      when(storage.io.contention) { contention := contention + 1.U }
+      when(storage.io.grants(1) && accelerator.io.busy_o) {
+        dmaOverlap := dmaOverlap + 1.U
       }
-
-      for (bank <- 0 until bankCount) {
-        val bankWriteEnable = WireDefault(false.B)
-        val bankWriteRow = WireDefault(0.U(rowIndexBits.W))
-        val bankWriteData =
-          WireDefault(VecInit(Seq.fill(4)(0.U(8.W))))
-        val bankWriteMask =
-          WireDefault(VecInit(Seq.fill(4)(false.B)))
-
-        when(scratchpadWriteFire && bankIndex(beatWordIndex) === bank.U) {
-          bankWriteEnable := true.B
-          bankWriteRow := rowIndex(beatWordIndex)
-          bankWriteData := VecInit(scratchpadWriteData.take(4))
-          bankWriteMask := VecInit(scratchpad.a.bits.mask(3, 0).asBools)
-        }
-        when(scratchpadWriteFire && bankIndex(beatWordIndex + 1.U) === bank.U) {
-          bankWriteEnable := true.B
-          bankWriteRow := rowIndex(beatWordIndex + 1.U)
-          bankWriteData := VecInit(scratchpadWriteData.drop(4))
-          bankWriteMask := VecInit(scratchpad.a.bits.mask(7, 4).asBools)
-        }
-
-        for (lane <- 0 until 9) {
-          when(tcdmAccepted && !tcdmRead &&
-              bankIndex(tcdmWordIndices(lane)) === bank.U) {
-            bankWriteEnable := true.B
-            bankWriteRow := rowIndex(tcdmWordIndices(lane))
-            bankWriteData := accelerator.io.tcdm_data_o(
-              32 * (lane + 1) - 1,
-              32 * lane).asTypeOf(Vec(4, UInt(8.W)))
-            bankWriteMask := accelerator.io.tcdm_be_o(
-              4 * (lane + 1) - 1,
-              4 * lane).asBools
-          }
-        }
-
-        when(bankWriteEnable) {
-          memory(bank).write(
-            bankWriteRow,
-            bankWriteData,
-            bankWriteMask.toSeq)
-        }
-      }
-
-      val tcdmReadValid = RegNext(tcdmAccepted && tcdmRead, false.B)
-      accelerator.io.tcdm_gnt_i := Fill(9, tcdmGrant)
-      accelerator.io.tcdm_r_data_i := Cat(tcdmReadData.reverse)
-      accelerator.io.tcdm_r_valid_i := Fill(9, tcdmReadValid)
+      dmaControlNode.regmap(
+        0x00 -> Seq(RegField.w(32, commandWrite(_, _))),
+        0x04 -> Seq(RegField.r(32, status)),
+        0x08 -> Seq(configField(dmaConfig.source)),
+        0x0c -> Seq(configField(dmaConfig.destination)),
+        0x10 -> Seq(configField(dmaConfig.lineBytes)),
+        0x14 -> Seq(configField(dmaConfig.rows)),
+        0x18 -> Seq(configField(dmaConfig.planes)),
+        0x1c -> Seq(configField(dmaConfig.sourceRowStride)),
+        0x20 -> Seq(configField(dmaConfig.destinationRowStride)),
+        0x24 -> Seq(configField(dmaConfig.sourcePlaneStride)),
+        0x28 -> Seq(configField(dmaConfig.destinationPlaneStride)),
+        0x2c -> Seq(RegField.r(32, dma.io.error)),
+        0x30 -> Seq(RegField.r(32, dma.io.bytesCopied)),
+        0x38 -> Seq(RegField.r(32, grants(0))),
+        0x3c -> Seq(RegField.r(32, grants(1))),
+        0x40 -> Seq(RegField.r(32, grants(2))),
+        0x44 -> Seq(RegField.r(32, contention)),
+        0x48 -> Seq(RegField.r(32, dmaOverlap)))
     }
   }
 }
 
 trait CanHavePeripheryNE16 { this: BaseSubsystem =>
   private val pbus = locateTLBusWrapper(PBUS)
+  private val fbus = locateTLBusWrapper(FBUS)
 
   val ne16 = p(NE16Key).map { params =>
     val accelerator = LazyModule(new NE16TL(params, pbus.beatBytes)(p))
@@ -343,13 +253,26 @@ trait CanHavePeripheryNE16 { this: BaseSubsystem =>
         accelerator.controlNode)(SynchronousCrossing()) :=
         TLFragmenter(pbus.beatBytes, pbus.blockBytes) := _
     }
-
     pbus.coupleTo("ne16-scratchpad") {
       TLInwardClockCrossingHelper(
         "ne16_scratchpad_crossing",
         accelerator,
         accelerator.scratchpadNode)(SynchronousCrossing()) :=
         TLFragmenter(pbus.beatBytes, pbus.blockBytes) := _
+    }
+    pbus.coupleTo("ne16-dma-control") {
+      TLInwardClockCrossingHelper(
+        "ne16_dma_control_crossing",
+        accelerator,
+        accelerator.dmaControlNode)(SynchronousCrossing()) :=
+        TLFragmenter(pbus.beatBytes, pbus.blockBytes) := _
+    }
+    fbus.coupleFrom("ne16-dma-memory") {
+      _ := TLWidthWidget(8) :=
+        TLOutwardClockCrossingHelper(
+          "ne16_dma_memory_crossing",
+          accelerator,
+          accelerator.dmaMemoryNode)(SynchronousCrossing())
     }
 
     accelerator
