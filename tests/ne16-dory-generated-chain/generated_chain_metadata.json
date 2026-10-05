@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
+  "seed": 0,
+  "layers": [
+    {
+      "namespace": "dory_chain_l0",
+      "config": "generators/ne16/config/config_single_layer0_ne16_chain.json",
+      "config_sha256": "4f09c9e7ac455f1c33bc651d33f3b69a6e5521d2ed4c89b6aff4195260b7f0a0",
+      "metadata_sha256": "eac9ac874f7d849cfc9353d876d913ee02d8481c213d52b94398bb933e758e48",
+      "input_sha256": "f24df40bb14792833f73327cb50a79fdf0a60f7e0ade3b7a41abaa75136d6118",
+      "output_sha256": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+      "upstream_jobs": 4,
+      "cooperative_jobs": 16,
+      "quantization_shift": 11
+    },
+    {
+      "namespace": "dory_chain_l1",
+      "config": "generators/ne16/config/config_single_layer0_ne16_chain.json",
+      "config_sha256": "4f09c9e7ac455f1c33bc651d33f3b69a6e5521d2ed4c89b6aff4195260b7f0a0",
+      "metadata_sha256": "de31a459acac9989ed95df868d473c6e90fc050b911db83369c7350f25d50f45",
+      "input_sha256": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+      "output_sha256": "9ea2ff0bd6c8cb1a369dbe911d484383f5e18078e497881bdde02afc6c196361",
+      "upstream_jobs": 4,
+      "cooperative_jobs": 16,
+      "quantization_shift": 9
+    }
+  ],
+  "reference_frontend": {
+    "seed": 0,
+    "frontend": "layer_generate_ne16.create_layer",
+    "link": "layer0.output -> layer1.input",
+    "layers": [
+      {
+        "index": 0,
+        "quantization_shift": 11,
+        "input_sha256": "f24df40bb14792833f73327cb50a79fdf0a60f7e0ade3b7a41abaa75136d6118",
+        "output_sha256": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+        "reference": "layer0/examples/chain_layer/out_layer0.txt"
+      },
+      {
+        "index": 1,
+        "quantization_shift": 9,
+        "input_sha256": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+        "output_sha256": "9ea2ff0bd6c8cb1a369dbe911d484383f5e18078e497881bdde02afc6c196361",
+        "reference": "layer1/examples/chain_layer/out_layer0.txt"
+      }
+    ]
+  },
+  "intermediate_sha256": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+  "dependency": "layer0 stores complete before layer1 loads from the same DRAM tensor",
+  "frontend_script_sha256": "fbdb8a5bfa9a4d0e84753e6333ba63576980b3c03d5f5464a271cfd4460e6cae"
+}

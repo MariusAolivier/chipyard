@@ -323,8 +323,78 @@ transport timings. Transport tags are not MAC results; only the integrated
 simulator checks numerical correctness. The regression runner allows 135
 minutes for this firmware; `GENERATED_LAYER_TIMEOUT` overrides that limit,
 and `TIMEOUT` overrides all defaults. Whole-network graph scheduling,
-other operators/quantizations, input-channel tiling, and multicore PMSIS
+other operators/quantization modes, input-channel tiling, and multicore PMSIS
 execution remain unsupported.
+
+### Genuine two-layer generated chain
+
+`tests/ne16-dory-generated-chain` contains two independently weighted
+48x48x16-to-16 convolutions. Each layer has 76,160 tensor bytes, four
+upstream DORY tiles, and 16 cooperative jobs. The pinned public frontend
+generates layer 0, then supplies its actual quantized output to the next
+`create_layer` call. Torch is seeded once for the chain, not once per
+layer. Thus layer 1's input equals layer 0's reference output byte-for-byte;
+its final oracle is a genuinely chained full-layer convolution reference,
+not a second standalone random-input test.
+
+DORY selects shifts 11 and 9 respectively. The cooperative importer accepts
+`--use-generated-shift` only with an explicit nondefault `--namespace`.
+It validates a literal shift in 0..31, preserves all other strict task-mode
+checks, and records the shift in the namespaced header and metadata.
+Without this opt-in, imports remain shift-11-only and the existing fixture
+is byte-identical. The manual tiled adapter also retains its shift-11
+default.
+
+```sh
+python3 generators/ne16/scripts/generate-dory-ne16-cooperative-chain.py \
+  --dory-root "$DORY_ROOT" --python "$DORY_ROOT/.venv/bin/python" \
+  --config generators/ne16/config/config_single_layer0_ne16_chain.json \
+  --config-name generators/ne16/config/config_single_layer0_ne16_chain.json \
+  --config generators/ne16/config/config_single_layer0_ne16_chain.json \
+  --config-name generators/ne16/config/config_single_layer0_ne16_chain.json \
+  --output-dir /tmp/ne16-generated-chain
+```
+
+The coordinator checks tensor linkage, original decimal/binary oracle
+agreement, and frontend/task shift agreement before atomically publishing
+the entire chain. Namespaces `dory_chain_l0` and `dory_chain_l1` isolate the
+bindings; each is compiled with only its own byte-preserved upstream helper
+directory. This is a two-layer composition of pinned DORY APIs, not general
+whole-network DORY graph scheduling.
+
+The complete generation/import wrapper passed on Idun in Slurm job
+`25590872` (`0:0`, 1 minute 11 seconds), reproducing all 27 fixture files
+byte-for-byte. The integrated `NE16RocketConfig` firmware also passed in
+Slurm job `25591115` (`0:0`, 1 hour 27 minutes 32 seconds). All 36,864
+intermediate and 36,864 final bytes matched the genuine chained references,
+with 16 jobs per layer and shifts 11/9. Each layer reused both slots 8/8
+times, with 3,455/3,453 physical DMA/NE16 overlap grants respectively.
+Source/reference integrity, unchanged intermediate, full coverage, all
+DRAM guards, and the entire scratchpad including stale tails passed.
+
+The firmware stores layer 0's output in a guarded DRAM intermediate, waits
+for every producer store to finish, verifies that intermediate, then gives
+the same buffer address to layer 1. It does not copy or repack the second
+input. Both layers reuse both scratch slots and require physical DMA/NE16
+overlap. Intermediate and final comparisons cover all 36,864 bytes each;
+source integrity, all DRAM guards, complete output coverage, and the whole
+scratchpad including stale tails are checked without clearing between
+layers.
+
+```sh
+python3 generators/ne16/scripts/test-dory-ne16-generated-chain.py
+cmake -S tests -B tests/build -D CMAKE_BUILD_TYPE=Debug
+cmake --build tests/build --target ne16-dory-generated-chain
+sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
+  +permissive +loadmem=tests/build/ne16-dory-generated-chain.riscv \
+  +permissive-off tests/build/ne16-dory-generated-chain.riscv
+```
+
+The host suite checks actual descriptors, shifts, halos and chained native
+DMA/pipeline transport; transport tags are not MAC results. Numerical
+correctness requires the integrated simulator. The regression runner
+allows 180 minutes, overridden by `GENERATED_CHAIN_TIMEOUT` or `TIMEOUT`.
+Generation, builds, and simulation on Idun must run inside Slurm.
 
 Focused hardware tests can be run from the Chipyard root:
 

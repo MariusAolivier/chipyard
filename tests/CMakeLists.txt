@@ -154,6 +154,33 @@ target_include_directories(ne16-dory-generated-layer BEFORE PRIVATE
 target_include_directories(ne16-dory-generated-layer SYSTEM PRIVATE
     ne16-dory-generated-layer/upstream/inc)
 target_compile_options(ne16-dory-generated-layer PRIVATE -include stdio.h)
+foreach(layer RANGE 0 1)
+  set(chain_layer_dir ne16-dory-generated-chain/layer${layer})
+  add_library(ne16-dory-chain-l${layer} OBJECT
+      ${chain_layer_dir}/dory_chain_l${layer}_layer.c
+      ${chain_layer_dir}/dory_chain_l${layer}_layer_data.c)
+  target_include_directories(ne16-dory-chain-l${layer} BEFORE PRIVATE
+      dory_ne16_compat ${chain_layer_dir} ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(ne16-dory-chain-l${layer} SYSTEM PRIVATE
+      ${chain_layer_dir}/upstream/inc)
+  target_compile_options(ne16-dory-chain-l${layer} PRIVATE -include stdio.h)
+endforeach()
+add_executable(ne16-dory-generated-chain
+    ne16-dory-generated-chain.c
+    ne16_driver.c
+    ne16_dma.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/pulp_nnx_util.c
+    dory_ne16_compat/dory_dma.c
+    dory_ne16_compat/dory_pipeline.c
+    dory_ne16_compat/dory_tiled_layer.c
+    $<TARGET_OBJECTS:ne16-dory-chain-l0>
+    $<TARGET_OBJECTS:ne16-dory-chain-l1>)
+target_include_directories(ne16-dory-generated-chain BEFORE PRIVATE
+    dory_ne16_compat
+    ne16-dory-generated-chain/layer0
+    ne16-dory-generated-chain/layer1
+    ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(symmetric symmetric.c)
 add_executable(ctc-test ctc-test.c)
 add_executable(multi-ctc-test multi-ctc-test.c)
@@ -205,6 +232,7 @@ add_dump_target(ne16-dma)
 add_dump_target(ne16-double-buffer)
 add_dump_target(ne16-dory-tiled-layer)
 add_dump_target(ne16-dory-generated-layer)
+add_dump_target(ne16-dory-generated-chain)
 
 
 # Add custom command to generate spiflash.img from spiflash.py

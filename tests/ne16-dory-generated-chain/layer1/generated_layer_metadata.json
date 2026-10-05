@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
+  "config": "generators/ne16/config/config_single_layer0_ne16_chain.json",
+  "config_sha256": "4f09c9e7ac455f1c33bc651d33f3b69a6e5521d2ed4c89b6aff4195260b7f0a0",
+  "config_hash_normalization": "LF",
+  "dimensions": {
+    "height": 48,
+    "width": 48,
+    "input_channels": 16,
+    "output_channels": 16
+  },
+  "upstream": {
+    "grid": {
+      "height": 2,
+      "width": 2,
+      "output_channel": 1
+    },
+    "body": {
+      "input": {
+        "height": 26,
+        "width": 26,
+        "channel": 16
+      },
+      "output": {
+        "height": 24,
+        "width": 24,
+        "channel": 16
+      }
+    },
+    "border": {
+      "input": {
+        "height": 25,
+        "width": 25,
+        "channel": 16
+      },
+      "output": {
+        "height": 24,
+        "width": 24,
+        "channel": 16
+      }
+    },
+    "jobs": 4,
+    "quantization_shift": 9
+  },
+  "cooperative_jobs": 16,
+  "cooperative_tile": {
+    "height": 12,
+    "width": 12,
+    "channels": 16
+  },
+  "slot_bytes": 16384,
+  "slot_offsets": {
+    "input": 2048,
+    "output": 8192,
+    "weights": 12288,
+    "scale": 14592,
+    "bias": 14656
+  },
+  "plan_sha256": "2fcdfd1951b43b0dc3fb6ce15f98118e3a9412d6ec7fee108dcdca4e51970046",
+  "source_sha256": {
+    "src/BNReluConvolution0.c": "a1d0f6ecc2dc74755e2bb20cde71c9f98d30a564c18f4f617c735fe2733be640",
+    "HW_description.json": "62a0831275f0437a518892a65da8375fe7b12c01d86abb55834af6be2955c149",
+    "inc/BNReluConvolution0.h": "83e91217e8e2ed38254017a9910fc964d48e5d3dff63a37295ac3da5b324c7fb",
+    "inc/dory_get_tile.h": "5b65e6ea29cf939451b6aabd21201e85eae8c1b94b9e1905d2ce495c1f224385",
+    "inc/execute.h": "005efb25d4f0253a3ebc2a081339e5c0025219d7855b115c237ddf1f32d23cbc",
+    "inc/layer.h": "2cbfffc5fbf88b9af3299783a2b10db7fbebaf68a34e02a683aaf6dad727c60d",
+    "inc/tile_index.h": "4c6fdae7ec537c042e42739e0a5666945297850fd42f372986130f23d8b72229",
+    "inc/tile_status.h": "d97d67841b8cea4f98884c8635f27ffaa244af9959ff9bccd6c5e285a365f5a5"
+  },
+  "tensor_sha256": {
+    "input": "144a157d89fe20e4aa26b64c61000dc731ecd80bbd6ae453c4c15d754ea3f0fc",
+    "weights": "066a711431df840ad837b7898eda65fd2cdd5ae8e8a96a54fb46178a0326eb4d",
+    "expected": "9ea2ff0bd6c8cb1a369dbe911d484383f5e18078e497881bdde02afc6c196361"
+  },
+  "namespace": "dory_chain_l1",
+  "quantization_shift": 9
+}

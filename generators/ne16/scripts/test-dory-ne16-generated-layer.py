@@ -16,6 +16,7 @@ import tempfile
 from types import SimpleNamespace
 
 from dory_ne16_import import parse_expected, sha256
+from dory_ne16_host_test import build_binding
 
 
 def extract(source: str, name: str) -> bytes:
@@ -195,37 +196,9 @@ def check_import(root: Path, temporary: Path) -> None:
 
 
 def check_binding(root: Path, directory: Path, compiler: list[str], timeout: int) -> None:
-    tests = root / "tests"
-    compat = tests / "dory_ne16_compat"
-    fixture = tests / "ne16-dory-generated-layer"
-    flags = ["-std=gnu99", "-O2", "-Wall", "-Wextra", "-Werror", "-include", "stdio.h"]
-    for include in (tests, compat, fixture):
-        flags += ["-I", str(include)]
-    flags += ["-isystem", str(fixture / "upstream" / "inc")]
-    # Retain the actual descriptor constructors; only MMIO entry points and
-    # the RISC-V-specific fence are replaced for the host transport model.
-    source = (tests / "ne16_driver.c").read_text()
-    fence = '__asm__ volatile("fence rw, rw" ::: "memory");'
-    assert source.count(fence) == 1
-    driver = directory / "driver.c"
-    driver.write_text(source.replace(fence, '__asm__ volatile("" ::: "memory");'))
-    driver_object, dma_object = directory / "driver.o", directory / "dma.o"
-    subprocess.run(compiler + flags +
-        ["-Dne16_reset=unused_mmio_reset", "-Dne16_submit=unused_mmio_submit",
-         "-Dne16_idle=unused_mmio_idle", "-c", str(driver), "-o", str(driver_object)],
-        check=True, timeout=timeout)
-    subprocess.run(compiler + flags +
-        ["-Dne16_dma_submit=unused_mmio_dma_submit", "-Dne16_dma_poll=unused_mmio_dma_poll",
-         "-Dne16_dma_status=unused_mmio_dma_status", "-c", str(tests / "ne16_dma.c"),
-         "-o", str(dma_object)], check=True, timeout=timeout)
-    sources = [tests / "dory-ne16-generated-layer-host.c", fixture / "dory_generated_layer.c",
-               compat / "dory_tiled_layer.c", compat / "dory_pipeline.c",
-               compat / "dory_dma.c", compat / "pulp_nnx.c", compat / "pulp_nnx_util.c"]
-    executable = directory / ("binding.exe" if os.name == "nt" else "binding")
-    subprocess.run(compiler + flags + [str(path) for path in sources] +
-                   [str(driver_object), str(dma_object), "-o", str(executable)],
-                   check=True, timeout=timeout)
-    subprocess.run([str(executable)], check=True, timeout=timeout)
+    build_binding(root, directory, compiler, timeout,
+                  [(root / "tests" / "ne16-dory-generated-layer", "dory_generated")],
+                  "dory-ne16-generated-layer-host.c")
 
 
 def main() -> int:
@@ -238,7 +211,7 @@ def main() -> int:
         parser.error("positive timeout and an existing host C compiler are required")
     root = Path(__file__).resolve().parents[3]
     try:
-        with tempfile.TemporaryDirectory(prefix="dory-generated-host-") as temporary:
+        with tempfile.TemporaryDirectory(prefix=".dory-generated-host-", dir=root) as temporary:
             directory = Path(temporary)
             check_import(root, directory)
             check_binding(root, directory, compiler, args.timeout)

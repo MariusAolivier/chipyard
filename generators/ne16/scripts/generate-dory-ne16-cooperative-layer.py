@@ -11,7 +11,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 
-from dory_ne16_import import sha256
+from dory_ne16_import import sha256, validate_dory_checkout
 
 
 def generate(args) -> dict:
@@ -21,17 +21,7 @@ def generate(args) -> dict:
     importer = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(importer)
     root = args.dory_root.resolve()
-    revision = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
-        capture_output=True, text=True, timeout=30).stdout.strip()
-    if revision != importer.DORY_COMMIT:
-        raise ValueError(f"DORY checkout must be pinned to {importer.DORY_COMMIT}, found {revision}")
-    hardware = Path("dory/Hardware_targets/PULP/GAP9_NE16/HW_description.json")
-    changed = subprocess.run(
-        ["git", "-C", str(root), "diff", "HEAD", "--name-only"], check=True,
-        capture_output=True, text=True, timeout=30).stdout.splitlines()
-    if any(name != hardware.as_posix() for name in changed):
-        raise ValueError("pinned DORY generator sources must be clean; only HW_description.json may differ")
+    hardware = validate_dory_checkout(root, importer.DORY_COMMIT)
     config_bytes = args.config.read_bytes().replace(b"\r\n", b"\n")
     config = json.loads(config_bytes)
     importer.validate_config(config)
@@ -57,9 +47,9 @@ def generate(args) -> dict:
             cwd=staging, env=environment, check=True, timeout=args.timeout)
         # DORY names these .hex, but they contain raw packed bytes, not text.
         return importer.import_layer(SimpleNamespace(
-            dory_commit=revision, config=staged_config,
+            dory_commit=importer.DORY_COMMIT, config=staged_config,
             config_name=args.config_name, config_sha256=sha256(config_bytes),
-            hardware_description=root / hardware, generated_dir=generated,
+            hardware_description=hardware, generated_dir=generated,
             input=generated / "hex" / "inputs.hex",
             weights=generated / "hex" / "BNReluConvolution0_weights.hex",
             expected=tensor_directory / "out_layer0.txt",

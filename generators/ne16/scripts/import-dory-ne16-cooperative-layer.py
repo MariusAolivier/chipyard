@@ -23,6 +23,20 @@ HEADERS = ("BNReluConvolution0.h", "dory_get_tile.h", "execute.h",
            "layer.h", "tile_index.h", "tile_status.h")
 
 
+def validate_namespace(namespace: str) -> None:
+    if (type(namespace) is not str or
+            not re.fullmatch(r"[a-z][a-z0-9_]{0,47}", namespace, flags=re.ASCII)):
+        raise ValueError("namespace must be a lowercase C identifier of at most 48 characters")
+
+
+def namespace_binding(text: str, namespace: str) -> str:
+    validate_namespace(namespace)
+    text = re.sub(r"\bdory_generated_(\w+)\b",
+                  lambda match: namespace + "_" + match[1], text)
+    return re.sub(r"\bDORY_GENERATED_(\w+)\b",
+                  lambda match: namespace.upper() + "_" + match[1], text)
+
+
 def uncomment(source: str) -> str:
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
 
@@ -170,7 +184,7 @@ def validate_config(config: dict) -> tuple[int, int, int]:
 
 
 def validate_generated(source: str, execute: str, height: int,
-                       width: int, channels: int) -> dict:
+                       width: int, channels: int, use_generated_shift: bool = False) -> dict:
     source, execute = uncomment(source), uncomment(execute)
     if "pulp_nn_conv_" in source or '#include "execute.h"' not in source:
         raise ValueError("not a DORY NE16 generated layer")
@@ -258,8 +272,16 @@ def validate_generated(source: str, execute: str, height: int,
             ["3", "0", "8", "8", "8", "weightOffsetModeLayerWise", "-128"] or
             compact(task[10]) != "1"):
         raise ValueError("unsupported generated NNX task mode")
+    quant_match = re.fullmatch(r"\(\s*nnx_quant_t\s*\)\s*\{(.*)\}", task[8], re.S)
+    if quant_match is None:
+        raise ValueError("unsupported generated nnx_quant_t")
+    quantization = initializer(quant_match[1])
+    shift = quantization.get("shift_amount")
+    if (type(shift) is not int or not 0 <= shift <= 31 or
+            not use_generated_shift and shift != 11):
+        raise ValueError("unsupported generated quantization shift")
     for text, kind, expected in (
-            (task[8], "nnx_quant_t", {"shift_amount": 11, "mode": "quantMode8Bit",
+            (task[8], "nnx_quant_t", {"shift_amount": shift, "mode": "quantMode8Bit",
              "function": "quantFunctionRelu", "flag_rounding": "NE16_FLAG_UNUSED"}),
             (task[9], "nnx_norm_t", {"mode": "normMode32Bit",
              "flag_bias": "NE16_FLAG_USED", "flag_shift": "NE16_FLAG_UNUSED"})):
@@ -280,8 +302,11 @@ def validate_generated(source: str, execute: str, height: int,
     for function in ("nnx_dispatch_task", "nnx_resolve_check"):
         if re.search(rf"\b{function}\s*\(", execute) is None:
             raise ValueError(f"missing generated {function}")
-    return {"grid": end, "body": body, "border": border,
-            "jobs": end["height"] * end["width"] * end["output_channel"]}
+    result = {"grid": end, "body": body, "border": border,
+              "jobs": end["height"] * end["width"] * end["output_channel"]}
+    if use_generated_shift:
+        result["quantization_shift"] = shift
+    return result
 
 
 def make_plan(height: int, width: int, channels: int) -> list[dict]:
@@ -326,7 +351,7 @@ def dma_initializer(config: dict) -> str:
     return "{" + ", ".join(f".{name} = {config.get(name, 0)}u" for name in DMA_FIELDS) + "}"
 
 
-def emit_binding(plan: list[dict]) -> str:
+def emit_binding(plan: list[dict], quantization_shift: int = 11) -> str:
     recipes = []
     for recipe in plan:
         tile = (
@@ -397,7 +422,7 @@ int dory_generated_layer_prepare(void *context, uint32_t index, unsigned int slo
   tile.addr.bias += memory.base;
   dory_pipeline_job_t result = {.load_count = 4};
   nnx_task_init(&result.task, 3, 0, 8, 8, 8, weightOffsetModeLayerWise, -128,
-      (nnx_quant_t){.shift_amount = 11, .mode = quantMode8Bit,
+      (nnx_quant_t){.shift_amount = """ + str(quantization_shift) + """, .mode = quantMode8Bit,
                    .function = quantFunctionRelu, .flag_rounding = NE16_FLAG_UNUSED},
       (nnx_norm_t){.mode = normMode32Bit, .flag_bias = NE16_FLAG_USED,
                   .flag_shift = NE16_FLAG_UNUSED}, 1);
@@ -418,6 +443,11 @@ int dory_generated_layer_prepare(void *context, uint32_t index, unsigned int slo
 
 
 def import_layer(args) -> dict:
+    namespace = getattr(args, "namespace", "dory_generated")
+    validate_namespace(namespace)
+    use_generated_shift = getattr(args, "use_generated_shift", False)
+    if use_generated_shift and namespace == "dory_generated":
+        raise ValueError("generated shifts require an explicit nondefault namespace")
     if args.dory_commit != DORY_COMMIT:
         raise ValueError("unsupported DORY revision; validate its templates before upgrading")
     config_bytes = args.config.read_bytes().replace(b"\r\n", b"\n")
@@ -431,7 +461,8 @@ def import_layer(args) -> dict:
         originals["inc/" + name] = (args.generated_dir / "inc" / name).read_bytes()
     upstream = validate_generated(originals["src/BNReluConvolution0.c"].decode(),
                                   originals["inc/execute.h"].decode(),
-                                  height, width, channels)
+                                  height, width, channels, use_generated_shift)
+    shift = upstream.get("quantization_shift", 11)
     if upstream["jobs"] <= 1:
         raise ValueError("expected a genuinely multi-tile DORY layer")
     tensors = {"input": args.input.read_bytes(), "weights": args.weights.read_bytes(),
@@ -457,6 +488,8 @@ def import_layer(args) -> dict:
                         ("WEIGHTS_BYTES", lengths["weights"]),
                         ("OUTPUT_BYTES", lengths["expected"])):
         header += f"#define DORY_GENERATED_{name} {value}u\n"
+    if use_generated_shift:
+        header += f"#define DORY_GENERATED_QUANT_SHIFT {shift}u\n"
     header += """
 typedef struct { uint32_t input, weights, output; } dory_generated_layer_t;
 extern const uint8_t dory_generated_input[DORY_GENERATED_INPUT_BYTES];
@@ -482,15 +515,21 @@ int dory_generated_layer_prepare(void *context, uint32_t index, unsigned int slo
         "source_sha256": {name: sha256(data) for name, data in originals.items()},
         "tensor_sha256": {name: sha256(data) for name, data in tensors.items()},
     }
+    if namespace != "dory_generated":
+        metadata["namespace"] = namespace
+    if use_generated_shift:
+        metadata["quantization_shift"] = shift
+    basename = namespace + "_layer"
+    data_source = (
+        '/* Generated by import-dory-ne16-cooperative-layer.py; do not edit. */\n'
+        '#include "dory_generated_layer.h"\n\n' +
+        "\n\n".join(c_array("dory_generated_" + name, data)
+                    for name, data in tensors.items()) + "\n")
     files = {"upstream/" + name: data for name, data in originals.items()}
     files.update({
-        "dory_generated_layer.h": header.encode(),
-        "dory_generated_layer.c": emit_binding(plan).encode(),
-        "dory_generated_layer_data.c": (
-            '/* Generated by import-dory-ne16-cooperative-layer.py; do not edit. */\n'
-            '#include "dory_generated_layer.h"\n\n' +
-            "\n\n".join(c_array("dory_generated_" + name, data)
-                        for name, data in tensors.items()) + "\n").encode(),
+        basename + ".h": namespace_binding(header, namespace).encode(),
+        basename + ".c": namespace_binding(emit_binding(plan, shift), namespace).encode(),
+        basename + "_data.c": namespace_binding(data_source, namespace).encode(),
         "cooperative_plan.json": plan_bytes,
         "generated_layer_metadata.json": (json.dumps(metadata, indent=2) + "\n").encode(),
     })
@@ -522,6 +561,9 @@ def main() -> None:
     parser.add_argument("--expected", required=True, type=Path)
     parser.add_argument("--expected-format", choices=("text", "binary"), default="text")
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--namespace", default="dory_generated")
+    parser.add_argument("--use-generated-shift", action="store_true",
+                        help="Import DORY's 0..31 shift for an explicit nondefault namespace")
     args = parser.parse_args()
     try:
         metadata = import_layer(args)
