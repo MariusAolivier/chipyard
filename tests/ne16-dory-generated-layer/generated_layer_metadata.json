@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "dory_commit": "add0d9c1be889b5f802b2606ced8c59acff8aa02",
+  "config": "generators/ne16/config/config_single_layer0_ne16_cooperative.json",
+  "config_sha256": "082f8c24ca2cc21a97bb25b07efd5cb39812d0c522321f752a78c871b85f6cb2",
+  "config_hash_normalization": "LF",
+  "dimensions": {
+    "height": 32,
+    "width": 32,
+    "input_channels": 16,
+    "output_channels": 48
+  },
+  "upstream": {
+    "grid": {
+      "height": 4,
+      "width": 1,
+      "output_channel": 1
+    },
+    "body": {
+      "input": {
+        "height": 11,
+        "width": 32,
+        "channel": 16
+      },
+      "output": {
+        "height": 9,
+        "width": 32,
+        "channel": 48
+      }
+    },
+    "border": {
+      "input": {
+        "height": 6,
+        "width": 32,
+        "channel": 16
+      },
+      "output": {
+        "height": 5,
+        "width": 32,
+        "channel": 48
+      }
+    },
+    "jobs": 4
+  },
+  "cooperative_jobs": 27,
+  "cooperative_tile": {
+    "height": 12,
+    "width": 12,
+    "channels": 16
+  },
+  "slot_bytes": 16384,
+  "slot_offsets": {
+    "input": 2048,
+    "output": 8192,
+    "weights": 12288,
+    "scale": 14592,
+    "bias": 14656
+  },
+  "plan_sha256": "ec912d13e076674a485ab6c8134ddd67fd9708f9c53a7ac0f07720b94d7b09f8",
+  "source_sha256": {
+    "src/BNReluConvolution0.c": "11f1581d9d52174d0b876a3e3b93ddeef65048a4013811c230fb4de656a8f54b",
+    "HW_description.json": "62a0831275f0437a518892a65da8375fe7b12c01d86abb55834af6be2955c149",
+    "inc/BNReluConvolution0.h": "83e91217e8e2ed38254017a9910fc964d48e5d3dff63a37295ac3da5b324c7fb",
+    "inc/dory_get_tile.h": "5b65e6ea29cf939451b6aabd21201e85eae8c1b94b9e1905d2ce495c1f224385",
+    "inc/execute.h": "005efb25d4f0253a3ebc2a081339e5c0025219d7855b115c237ddf1f32d23cbc",
+    "inc/layer.h": "2cbfffc5fbf88b9af3299783a2b10db7fbebaf68a34e02a683aaf6dad727c60d",
+    "inc/tile_index.h": "4c6fdae7ec537c042e42739e0a5666945297850fd42f372986130f23d8b72229",
+    "inc/tile_status.h": "d97d67841b8cea4f98884c8635f27ffaa244af9959ff9bccd6c5e285a365f5a5"
+  },
+  "tensor_sha256": {
+    "input": "177a8cffb0303aa31df286a9da9e3130297fdcfb78e9c459d0f4a6a646dc4806",
+    "weights": "eacf60f27baf47785c29712d3b9e3e5cf0cb3f9d639d62188c292753e8c24769",
+    "expected": "558df5cd5a6d3bbc86136f724d7f2f4dbac8a9e428384dd334967120b9c720e4"
+  }
+}

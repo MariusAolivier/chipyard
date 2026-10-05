@@ -2,11 +2,11 @@
 """Import and validate a single verbatim DORY NE16 generated tile."""
 
 import argparse
-import hashlib
 import json
 import re
 import shutil
 from pathlib import Path
+from dory_ne16_import import c_array, sha256
 
 REQUIRED_NNX = (
     "nnx_task_set_dims",
@@ -23,18 +23,6 @@ REQUIRED_HEADERS = (
     "tile_index.h",
     "tile_status.h",
 )
-
-
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def c_array(name: str, data: bytes) -> str:
-    lines = [f"const uint8_t {name}[{len(data)}] = {{"]
-    for offset in range(0, len(data), 16):
-        lines.append("    " + ", ".join(f"0x{value:02x}" for value in data[offset : offset + 16]) + ",")
-    lines.append("};")
-    return "\n".join(lines)
 
 
 def validate_layer(source: str) -> tuple[str, dict[str, int]]:

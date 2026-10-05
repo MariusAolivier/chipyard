@@ -76,7 +76,8 @@ scripts/run-conv-test.sh
 ```
 
 The regression covers descriptor construction, hardware DMA, double-buffered
-execution, the verbatim generated DORY tile, and the existing 1x1, 3x3, and
+execution, the verbatim generated DORY tile, the automatically imported
+multi-tile layer, and the existing 1x1, 3x3, and
 DORY-derived convolutions. The double-buffer test checks six distinct
 fixture-derived jobs, both slot reuse and output ordering, scratchpad/DRAM
 guards, and a hardware counter proving DMA scratchpad access during NE16
@@ -238,6 +239,92 @@ and checks all 65,536 individual byte corruptions and restorations, all 256
 fill values, adjacent word-boundary faults, and unaligned expected buffers.
 The helper compares complete 64-bit words on success and diagnoses individual
 bytes only on mismatch; no scratch bytes are omitted.
+
+## Automatic DORY cooperative generation/import
+
+`scripts/generate-dory-ne16-cooperative-layer.py` runs the upstream NE16
+single-layer frontend and imports its output without manually adapting tiles
+or DMA descriptors. DORY must be pinned to
+`add0d9c1be889b5f802b2606ced8c59acff8aa02`, with an already working Python
+environment. The wrapper verifies the checkout revision and rejects modified
+tracked generator sources other than `HW_description.json`. It stages the
+configuration, raw tensors, and generated application privately; it does not
+overwrite the DORY checkout's hardware description. That description is
+recorded byte-for-byte alongside the original layer source and headers.
+
+The supported mode remains uint8 HWC, 16 input channels, 3x3 stride-1
+same padding, packed 8-bit weights, shift-11 BN/ReLU, and complete groups of
+16 output channels. The importer checks the generated kernel, tile lattice,
+input geometry, full-tensor DMA strides, normalization offsets, NNX mode,
+and preparation helper. Unsupported modes and malformed inputs fail before
+output publication. Output directories must be fresh; existing fixtures are
+never silently replaced.
+
+**This is lowering/retiling, not direct execution of DORY's three-worker
+function.** The binding calls the original `execute_prepare` helper and NNX
+primitives, while automatically emitting Chipyard's guarded 12x12x16 jobs
+and native DMA recipes. It uses the cooperative scheduler rather than
+sequentially pretending to run PMSIS loader/executor/storer workers.
+The raw generated worker source is retained unchanged as provenance, not
+linked into this firmware. Copied headers are system includes so their unused
+debug helpers remain byte-identical without weakening checks on our code.
+
+`tests/ne16-dory-generated-layer` is a genuinely generated 32x32x48 layer,
+not a permutation of the earlier reference. DORY chose four 9x32x48 body
+tiles with a 5-row last tile; the importer emits 27 spatial/channel jobs.
+Its 72,832 tensor bytes exceed the 64-KiB scratchpad. The firmware compares
+all 49,152 output bytes against DORY's independent full-layer reference and
+checks coverage, source integrity, guards, slot reuse, and actual hardware
+DMA/NE16 overlap. Metadata records both tile counts, configuration and plan
+hashes, and every original-source/tensor hash. Original artifacts and generated
+fixture files retain their exact bytes across Git checkouts.
+
+The integrated `NE16RocketConfig` Verilator run passed all 49,152 output bytes,
+coverage, source integrity, and every scratch/DRAM guard. It completed 27 jobs
+with slot reuse counts 14/13 and 4,720 DMA/NE16 overlap grants. The observed
+run finished successfully in 1:02:31; exact timing and grant counts may vary.
+
+Generate into a new directory using the checked-in configuration. To reproduce
+the recorded upstream tile selection, the DORY checkout must use the hardware
+description saved under the fixture's `upstream/HW_description.json`; the
+wrapper records the description actually used rather than installing it:
+
+```sh
+python3 generators/ne16/scripts/generate-dory-ne16-cooperative-layer.py \
+  --dory-root "$DORY_ROOT" --python "$DORY_ROOT/.venv/bin/python" \
+  --config generators/ne16/config/config_single_layer0_ne16_cooperative.json \
+  --config-name generators/ne16/config/config_single_layer0_ne16_cooperative.json \
+  --output-dir /tmp/ne16-generated-layer
+```
+
+Heavy generation, builds, and simulation on Idun belong in Slurm allocations.
+The importer can also consume an existing generated directory through
+`scripts/import-dory-ne16-cooperative-layer.py`; `--help` lists the required
+raw tensor, configuration/hash, revision, and hardware-description arguments.
+DORY's `hex/inputs.hex` and `hex/BNReluConvolution0_weights.hex` are raw binary
+despite their extensions; `out_layer0.txt` is the decimal full-layer oracle.
+Configuration hashing normalizes CRLF to LF; original source and tensor
+hashes do not normalize bytes.
+
+```sh
+python3 generators/ne16/scripts/test-dory-ne16-generated-layer.py
+cmake -S tests -B tests/build -D CMAKE_BUILD_TYPE=Debug
+cmake --build tests/build --target ne16-dory-generated-layer
+sims/verilator/simulator-chipyard.harness-NE16RocketConfig \
+  +permissive +loadmem=tests/build/ne16-dory-generated-layer.riscv \
+  +permissive-off tests/build/ne16-dory-generated-layer.riscv
+```
+
+The host suite checks deterministic fixture reproduction, rejection without
+partial writes, full coverage and halos, and the actual generated C callback.
+It compares real NNX descriptor construction against the existing adapter
+and exercises the native DMA queue/cooperative pipeline under different
+transport timings. Transport tags are not MAC results; only the integrated
+simulator checks numerical correctness. The regression runner allows 135
+minutes for this firmware; `GENERATED_LAYER_TIMEOUT` overrides that limit,
+and `TIMEOUT` overrides all defaults. Whole-network graph scheduling,
+other operators/quantizations, input-channel tiling, and multicore PMSIS
+execution remain unsupported.
 
 Focused hardware tests can be run from the Chipyard root:
 
