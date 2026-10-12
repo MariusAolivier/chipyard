@@ -16,8 +16,12 @@ builds depend on those paths.
    [`ne16_dma.c`](../../tests/ne16_dma.c): the software-facing DMA contract.
 5. [`dory_dma.c`](../../tests/dory_ne16_compat/dory_dma.c): how generated
    DORY transfers are mapped onto the native DMA.
-6. [`README.md`](README.md): build, simulation, FPGA, and validation context.
-7. [`IDUN_RUNBOOK.md`](IDUN_RUNBOOK.md): operational FireSim/U250 procedures.
+6. [`dory_pipeline.c`](../../tests/dory_ne16_compat/dory_pipeline.c): the
+   cooperative two-slot runtime scheduler.
+7. [`ne16-dory-generated-chain/`](../../tests/ne16-dory-generated-chain/):
+   generated layer bindings and data linked into the firmware.
+8. [`README.md`](README.md): build, simulation, FPGA, and validation context.
+9. [`IDUN_RUNBOOK.md`](IDUN_RUNBOOK.md): operational FireSim/U250 procedures.
 
 <details>
 <summary><strong>1. Chipyard integration and configuration</strong></summary>
@@ -66,7 +70,7 @@ into generated build directories; they are not copied into this repository.
 </details>
 
 <details>
-<summary><strong>3. C drivers and firmware interfaces</strong></summary>
+<summary><strong>3. Runtime needed to execute NE16/DORY layers</strong></summary>
 
 ### NE16 and DMA drivers
 
@@ -75,31 +79,11 @@ into generated build directories; they are not copied into this repository.
 - [`ne16_dma.h`](../../tests/ne16_dma.h)
 - [`ne16_dma.c`](../../tests/ne16_dma.c)
 
-### Register-level and convolution tests
+These are linked into every target firmware that talks to the NE16 or DMA.
+They are not test-only mocks.
 
-- [`ne16-descriptor.c`](../../tests/ne16-descriptor.c)
-- [`ne16-conv.c`](../../tests/ne16-conv.c)
-- [`ne16-conv3x3.c`](../../tests/ne16-conv3x3.c)
-- [`ne16-dma.c`](../../tests/ne16-dma.c)
-- [`ne16-dma-smoke.c`](../../tests/ne16-dma-smoke.c)
-- [`ne16-double-buffer.c`](../../tests/ne16-double-buffer.c)
-- [`ne16_test_scratch.h`](../../tests/ne16_test_scratch.h)
-  - shared scratchpad test helper and guard checker
-- [`ne16-test-scratch-host.c`](../../tests/ne16-test-scratch-host.c)
-  - host-side validation of the scratchpad test helper
-
-### DORY-oriented firmware tests
-
-- [`ne16-dory-generated-tile.c`](../../tests/ne16-dory-generated-tile.c)
-- [`ne16-dory-generated-layer.c`](../../tests/ne16-dory-generated-layer.c)
-- [`ne16-dory-generated-chain.c`](../../tests/ne16-dory-generated-chain.c)
-- [`ne16-dory-tiled-layer.c`](../../tests/ne16-dory-tiled-layer.c)
-- [`dory-ne16-generated-layer-host.c`](../../tests/dory-ne16-generated-layer-host.c)
-- [`dory-ne16-generated-chain-host.c`](../../tests/dory-ne16-generated-chain-host.c)
-- [`dory-ne16-tiled-host.c`](../../tests/dory-ne16-tiled-host.c)
-
-The complete firmware directory is [`tests/`](../../tests/), which also
-contains unrelated Chipyard example programs.
+The DORY runtime adapter is listed separately in section 4. Generated layer
+bindings and their tensor data are listed in section 5.
 
 </details>
 
@@ -131,9 +115,11 @@ Open the complete directory here:
 </details>
 
 <details>
-<summary><strong>5. Generated DORY sources and fixtures</strong></summary>
+<summary><strong>5. Generated DORY execution inputs</strong></summary>
 
-### Generated layers and chains
+These generated artifacts are linked into firmware that executes the
+corresponding tile, layer, or chain. They are not host-only verification
+fixtures.
 
 - [`tests/ne16-dory-generated/`](../../tests/ne16-dory-generated/)
   - imported/generated single-tile kernel
@@ -147,8 +133,6 @@ Open the complete directory here:
 
 - [`ne16_dory_layer_data.c`](../../tests/ne16_dory_layer_data.c)
 - [`ne16_dory_layer_data.h`](../../tests/ne16_dory_layer_data.h)
-- [`dory-ne16-generated-host.h`](../../tests/dory-ne16-generated-host.h)
-- [`generated chain test`](../../tests/ne16-dory-generated-chain.c)
 
 Generated DORY code is intentionally kept under `tests/` rather than mixed
 with the hand-written hardware or compatibility code.
@@ -170,18 +154,13 @@ with the hand-written hardware or compatibility code.
 - [`import-dory-ne16-cooperative-layer.py`](scripts/import-dory-ne16-cooperative-layer.py)
 - [`import-dory-ne16-generated-tile.py`](scripts/import-dory-ne16-generated-tile.py)
 
-### Generated-output validation
-
-- [`dory_ne16_host_test.py`](scripts/dory_ne16_host_test.py)
-- [`test-dory-ne16-generated-layer.py`](scripts/test-dory-ne16-generated-layer.py)
-- [`test-dory-ne16-generated-chain.py`](scripts/test-dory-ne16-generated-chain.py)
-- [`test-dory-ne16-tiled-layer.py`](scripts/test-dory-ne16-tiled-layer.py)
-- [`test-import-dory-ne16-generated-tile.py`](scripts/test-import-dory-ne16-generated-tile.py)
+These scripts are needed to reproduce or replace the generated artifacts, but
+not to run an already imported fixture.
 
 </details>
 
 <details>
-<summary><strong>7. Simulation, lint, and regression scripts</strong></summary>
+<summary><strong>7. Build and target execution</strong></summary>
 
 - [`fetch-bender.sh`](scripts/fetch-bender.sh)
 - [`fetch-deps.sh`](scripts/fetch-deps.sh)
@@ -189,9 +168,10 @@ with the hand-written hardware or compatibility code.
 - [`prepare-rtl.sh`](scripts/prepare-rtl.sh)
 - [`build-chipyard-sim.sh`](scripts/build-chipyard-sim.sh)
 - [`run-conv-test.sh`](scripts/run-conv-test.sh)
-- [`test-fpga-storage.sh`](scripts/test-fpga-storage.sh)
 
-The main test documentation is [`tests/README.md`](../../tests/README.md).
+The target firmware test programs that actually execute layers, tiles, DMA,
+or NE16 are listed in section 9. The main build documentation is
+[`tests/README.md`](../../tests/README.md).
 
 </details>
 
@@ -226,19 +206,70 @@ Operational instructions are in [`IDUN_RUNBOOK.md`](IDUN_RUNBOOK.md).
 </details>
 
 <details>
-<summary><strong>9. Hardware verification testbenches</strong></summary>
+<summary><strong>9. Target execution tests</strong></summary>
 
-- [`ne16-fpga-storage-tb.sv`](tests/ne16-fpga-storage-tb.sv)
-  - storage-level FPGA replacement tests
-- [`ne16-fpga-core-tb.sv`](tests/ne16-fpga-core-tb.sv)
-  - standalone NE16 core tests with queued 1x1, 3x3, and DORY cases
+These are test executables, but unlike the host mocks in section 10 they
+actually run on the RISC-V target and exercise the NE16/DMA hardware.
 
-The test runner is [`test-fpga-storage.sh`](scripts/test-fpga-storage.sh).
+- [`ne16-descriptor.c`](../../tests/ne16-descriptor.c)
+- [`ne16-conv.c`](../../tests/ne16-conv.c)
+- [`ne16-conv3x3.c`](../../tests/ne16-conv3x3.c)
+- [`ne16-dma.c`](../../tests/ne16-dma.c)
+- [`ne16-dma-smoke.c`](../../tests/ne16-dma-smoke.c)
+- [`ne16-double-buffer.c`](../../tests/ne16-double-buffer.c)
+- [`ne16-dory-layer.c`](../../tests/ne16-dory-layer.c)
+- [`ne16-dory-tiled-layer.c`](../../tests/ne16-dory-tiled-layer.c)
+- [`ne16-dory-generated-tile.c`](../../tests/ne16-dory-generated-tile.c)
+- [`ne16-dory-generated-layer.c`](../../tests/ne16-dory-generated-layer.c)
+- [`ne16-dory-generated-chain.c`](../../tests/ne16-dory-generated-chain.c)
 
 </details>
 
 <details>
-<summary><strong>10. Documentation and design notes</strong></summary>
+<summary><strong>10. Verification-only and optional test code</strong></summary>
+
+These files validate descriptors, generated plans, RTL replacements, and
+host-side behavior. They are not needed to execute an already-built layer or
+tile on the target. They are the first candidates to remove when reducing the
+repository to the execution path.
+
+### Host-only mocks and harnesses
+
+- [`dory-ne16-generated-host.h`](../../tests/dory-ne16-generated-host.h)
+  - host-side transport and descriptor model
+- [`dory-ne16-generated-layer-host.c`](../../tests/dory-ne16-generated-layer-host.c)
+- [`dory-ne16-generated-chain-host.c`](../../tests/dory-ne16-generated-chain-host.c)
+- [`dory-ne16-tiled-host.c`](../../tests/dory-ne16-tiled-host.c)
+- [`ne16-test-scratch-host.c`](../../tests/ne16-test-scratch-host.c)
+- [`ne16_test_scratch.h`](../../tests/ne16_test_scratch.h)
+  - shared target-side scratchpad guard helper
+
+These tests do not start the Chisel NE16 hardware. They mock transport and
+check geometry, descriptors, coverage, guards, and generated plans.
+
+### Host/generation validation scripts
+
+- [`dory_ne16_host_test.py`](scripts/dory_ne16_host_test.py)
+- [`test-dory-ne16-generated-layer.py`](scripts/test-dory-ne16-generated-layer.py)
+- [`test-dory-ne16-generated-chain.py`](scripts/test-dory-ne16-generated-chain.py)
+- [`test-dory-ne16-tiled-layer.py`](scripts/test-dory-ne16-tiled-layer.py)
+- [`test-import-dory-ne16-generated-tile.py`](scripts/test-import-dory-ne16-generated-tile.py)
+
+### Scala and RTL verification
+
+- [`NE16DMASpec.scala`](../chipyard/src/test/scala/ne16/NE16DMASpec.scala)
+- [`NE16ScratchpadSpec.scala`](../chipyard/src/test/scala/ne16/NE16ScratchpadSpec.scala)
+- [`ne16-fpga-storage-tb.sv`](tests/ne16-fpga-storage-tb.sv)
+- [`ne16-fpga-core-tb.sv`](tests/ne16-fpga-core-tb.sv)
+- [`test-fpga-storage.sh`](scripts/test-fpga-storage.sh)
+
+The complete firmware directory is [`tests/`](../../tests/), which also
+contains unrelated Chipyard example programs.
+
+</details>
+
+<details>
+<summary><strong>11. Documentation and design notes</strong></summary>
 
 - [`README.md`](README.md)
   - technical overview and validated behavior
