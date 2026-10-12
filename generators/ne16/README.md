@@ -45,6 +45,17 @@ flow does not apply a `common_cells` namespace overlay, so such collisions
 must be handled separately if additional external RTL is added to the
 simulator.
 
+`scripts/prepare-rtl.sh` retains its default Verilator manifest. With
+`--vivado`, it instead generates `build/vivado/ne16-vivado.tcl` using
+Bender's Vivado synthesis target, including Xilinx clock cells and target
+defines. It adds the `NE16BlackBox` wrapper and substitutes the same HCI FIFO
+overlay in a separate build directory, without changing the upstream sources
+or the Verilator manifest. The FPGA manifest also replaces the four
+clock-gated SCM implementations with `fpga/ne16_storage.sv`.
+`--fpga-sim` selects the native FPGA source targets and the same storage
+replacement in `build/fpga-sim/ne16-fpga.f`, for functional comparison with
+the default ASIC manifest.
+
 `rtl/ne16_chipyard_wrapper.sv` exposes the upstream nine-lane TCDM and HWPE
 control interfaces as packed vectors suitable for a Chisel BlackBox. It keeps
 HWPE's native 16-bit transaction ID internally and ties it to zero because the
@@ -82,6 +93,324 @@ DORY-derived convolutions. The double-buffer test checks six distinct
 fixture-derived jobs, both slot reuse and output ordering, scratchpad/DRAM
 guards, and a hardware counter proving DMA scratchpad access during NE16
 execution.
+
+## FireSim U250 bring-up
+
+`firechip.chip.FireSimNE16RocketConfig` wraps `chipyard.NE16RocketConfig`
+with the FireSim bridges. The existing build recipe is
+`alveo_u250_firesim_ne16_rocket_singlecore_no_nic`, using
+`BaseXilinxAlveoU250Config`, a 60 MHz **host FPGA** clock, and the `TIMING`
+strategy. This is a FireSim-hosted simulation of the target SoC, not a
+standalone native FPGA SoC deployment.
+
+Regenerate the RTL and driver together in fresh directories after activating
+the Chipyard/FireSim environment. From the repository root:
+
+```sh
+ROOT=$(pwd)
+tag=ne16-u250-$(date +%Y%m%d-%H%M%S)
+GENERATED_DIR="$ROOT/sims/firesim/sim/generated-src/$tag"
+OUTPUT_DIR="$ROOT/sims/firesim/sim/output/$tag"
+CL_DIR="$ROOT/sims/firesim/platforms/xilinx_alveo_u250/cl_$tag"
+cd "$ROOT/sims/firesim/sim"
+make replace-rtl \
+  PLATFORM=xilinx_alveo_u250 TARGET_PROJECT=firesim \
+  TARGET_PROJECT_MAKEFRAG="$ROOT/generators/firechip/chip/src/main/makefrag/firesim" \
+  DESIGN=FireSim TARGET_CONFIG=FireSimNE16RocketConfig \
+  PLATFORM_CONFIG=BaseXilinxAlveoU250Config \
+  GENERATED_DIR="$GENERATED_DIR" OUTPUT_DIR="$OUTPUT_DIR" \
+  fpga_work_dir="$CL_DIR"
+```
+
+The checked-out FireSim template lacks a Vivado 2024.2 block-design library,
+and its Aurora 12.0 references do not exist in the installed 2024.2 catalog.
+The task-scoped overlay copies the three affected definitions, selects
+Aurora 13.0, and reuses the unchanged interface/connection definitions.
+The host clock wizard uses `PRIM_SOURCE No_buffer` because DDR0's UI clock,
+not an external clock pin, drives its input. This preserves the DDR-derived
+clock's timing instead of redefining it as an internal primary clock.
+It does not modify the FireSim source template or disable IP-catalog,
+block-design, synthesis, or implementation checks. Preparation deliberately
+rejects an existing 2024.2 library instead of overwriting a native port.
+It also generates and loads the pinned NE16 Vivado source manifest.
+`NE16BlackBox` has externally supplied RTL: generating the Chisel/Golden Gate
+design alone does not supply its wrapper or transitive RTL dependencies.
+
+```sh
+VIVADO_ROOT=/path/to/Vivado/2024.2
+source "$VIVADO_ROOT/settings64.sh"
+export NE16_U250_BOARD_REPO="$VIVADO_ROOT/data/boards"
+bash "$ROOT/generators/ne16/scripts/prepare-firesim-u250-vivado.sh" "$CL_DIR"
+vivado -mode batch -nolog -nojournal \
+  -source "$ROOT/generators/ne16/scripts/firesim-u250-vivado-preflight.tcl" \
+  -tclargs "$NE16_U250_BOARD_REPO" "$CL_DIR/design/ne16-vivado.tcl"
+"$ROOT/sims/firesim/platforms/xilinx_alveo_u250/build-bitstream.sh" \
+  --cl_dir "$CL_DIR" --frequency 60 --strategy TIMING --board au250
+```
+
+The preflight checks the installed U250 1.3 board, enumerates required
+IP versions, and optionally elaborates `NE16BlackBox` with explicit lane/data
+width checks. RTL elaboration is not synthesis, timing, or MAC validation.
+The implementation outputs are
+`$CL_DIR/vivado_proj/firesim.bit` and
+`$CL_DIR/vivado_proj/reports/final_timing_summary.rpt`. Check completed
+implementation, fresh clock/methodology and bus-skew reports, and matching
+RTL/driver/bitstream provenance before running firmware. The driver's
+`+check-fingerprint` checks the common FireSim presence value, not a
+design-specific identity; it cannot replace provenance checks.
+The corrected-clock Vivado 2024.2 flow has produced a bitstream with the
+current DMA design and fresh reports with no failing setup, hold, or
+pulse-width endpoints. All 28 bus-skew checks pass, with minimum slack
+2.969 ns. The clock-wizard primary-clock warnings are resolved. The remaining
+vendor PCIe scoped-clock warning was traced to the reference-clock probation
+logic: both affected clocks have no register users outside XDMA. The reset
+inputs terminate in vendor synchronizers/MMCM reset, and the DDR reset output
+comes from the MIG initialization state machine, including its 200 us/500 us
+reset sequence. These reset/protocol interfaces are not synchronous data
+interfaces requiring ordinary I/O-delay specifications; no arbitrary timing
+exceptions or warning suppression were added. The selected Idun U250 has been
+programmed with the corrected volatile bitstream and reconnected over PCIe.
+The native fingerprint check and descriptor firmware pass on that card.
+The first convolution firmware currently times out with status `0x00000101`:
+CPU scratchpad input readback is correct and 114 accelerator grants are
+observed, but both output buffers retain their sentinels. A separate DMA probe
+did not finish before the host rebooted. On recovery, the FPGA node lacked
+both `/cluster/work` and `/cluster/projects`; the reboot cause and the current
+volatile image are unverified. On-board MAC, DMA, double-buffering, and chain
+validation remain incomplete. Both shared filesystems were accessible again
+on October 8. Reestablish image provenance before any further board execution.
+
+### Confirmed FPGA clock-cell incompatibility
+
+**The unmodified native FPGA sources and the previously built image are not
+functionally safe to deploy.**
+Its pinned `tech_cells_generic/src/fpga/tc_clk_xilinx.sv` implements
+`tc_clk_gating` as `assign clk_o = clk_i`, ignoring the enable inputs.
+NE16/HWPE's latch-based configuration register file uses those clock gates
+as per-word/per-byte write enables, not just power-saving controls. Removing
+the gates therefore overwrites every configuration word/context with the
+last sampled write data. The input buffer, accumulator memories, and SCM
+FIFO storage also depend on functional clock gating.
+
+The standalone `tests/ne16-fpga-core-tb.sv` repeats the two queued operations
+from `tests/ne16-conv.c`, with atomic nine-lane grants and one-cycle memory
+read responses. The ASIC source configuration preserves the weight/input
+pointers and produces all 18 expected output words. With the native FPGA
+sources, both pointers instead read back as the final configuration word,
+`0x00408047`; the first TCDM address becomes `0x00408044` instead of
+`0x20001000`. Strict mode rejects that invalid pointer. The optional
+`+wrap-invalid-address` diagnostic models low-address aliasing and reproduces
+the busy/full `0x00000101` timeout; it is not an input-validation bypass for
+normal use or a cycle-exact model of the full SoC.
+
+Compile the probe with Verilator's `--binary --timing`, top module
+`ne16_fpga_core_tb`, the corresponding NE16 source manifest, and
+`+define+SYNTHESIS`. The native comparison uses the pinned
+`rtl`, `fpga`, `xilinx`, `synthesis`, and `vivado` Bender targets with the same
+HCI overlay and BlackBox wrapper. Changing only the native manifest's clock
+cell file to the functional generic implementation restores correct pointer
+readback and both numerical results in simulation. This isolates the source
+incompatibility; it is **not** a validated FPGA implementation or a new
+bitstream. A production port must preserve the functional write/clock-enable
+semantics in FPGA-safe RTL, then repeat implementation, timing review, and
+board validation. Increasing the software poll limit cannot fix corrupted
+configuration words. The descriptor firmware only constructs descriptors in
+CPU memory, so its pass did not exercise this register-file write path.
+
+The FPGA-only storage overlay keeps the original module interfaces but uses
+ordinary-clock flip-flops with explicit write enables. It preserves
+configuration byte masks, clear/reset behavior, sampled-data broadcasts,
+scalar/wide accumulator masks, registered reads, and held upper read lanes.
+It does not substitute ASIC clock gates into the FPGA flow or change the
+Scala control bridge, scratchpad arbiter, or DMA.
+
+Run the storage/core comparison inside an allocated build environment:
+
+```sh
+bash generators/ne16/scripts/test-fpga-storage.sh /path/to/fresh-results
+```
+
+The regression compares both source configurations against storage scoreboards
+at accumulator width factors 4 and 8, then runs two queued 1x1/3x3 jobs and
+two serialized quantized DORY fixture jobs, each with and without
+whole-request backpressure. Serialization matches the existing DORY pipeline,
+which overlaps DMA with one active NE16 computation. Queuing both quantized
+fixtures directly exposes a numerical mismatch in the unmodified ASIC RTL;
+that separate baseline limitation is not attributed to the FPGA storage port.
+It checks all 24 configuration words, numerical outputs, unchanged inputs and
+weights, and every scratchpad guard byte. The ASIC latch scoreboard separates
+reads from writes to avoid zero-delay gate/latch scheduling races; the FPGA
+scoreboard additionally checks simultaneous read/write behavior against the
+registered read-before-write contract. The DORY reference is the committed
+8x8x16 fixture, not a reference calculated by the replacement RTL.
+On October 8, all four storage runs and twelve core cases passed on the
+pinned ASIC and repaired native FPGA source sets. The default ASIC manifest
+was byte-identical before and after preparation. These standalone checks do
+not establish full-SoC or on-board operation. The fresh repaired-storage
+`TIMING` build at a 60 MHz host clock completed routing with setup slack
+of +0.057 ns and hold slack of +0.010 ns, with zero failing setup, hold, or
+pulse-width endpoints. All 28 routed bus-skew checks passed, with minimum
+slack +3.182 ns. The build completed with status 0, recorded build-input
+hashes matched, and both bitstream copies had SHA-256
+`d6238efc1e06785fe91a98e2849dd60adf5288f1e9487c6f801e014661e376e8`.
+The October 8 allocation was released before the authorized cutoff, without
+programming or changing XDMA. On October 10, the repaired image passed the
+primitive-level storage/clock review: zero mapped NE16 latches and global
+buffer drivers for active clock pins. Fresh timing checks reported no
+unconstrained internal endpoints, missing clocks, or timing failures.
+The clock/reset audit found no registers outside XDMA using either clock in
+the vendor scoped clock-group `TIMING-54` warning, and confirmed the reset
+input synchronizers and DDR calibration reset-output source. The warning
+remains visible. The generated target-clock multicycle exceptions are
+one-cycle setup and zero-cycle hold, not relaxed multi-cycle requirements.
+The detailed CDC report has no critical violations: 360 synchronized-bit
+and 46 synchronized-reset informational entries, plus 415 clock-enable
+controlled crossing warnings. Violation-object properties resolved every
+endpoint: both endpoints of each warning are confined to vendor debug
+FIFOs (4), AXI width-converter FIFOs (122), XDMA calibration counters (288),
+or the AXI clock-converter FIFO (1), with none in NE16. This completed the
+review for bounded physical bring-up without waiving the warnings.
+Both hierarchical and mapped-leaf `report_cdc -cells` probes returned empty
+reports, so they are not used to attribute the encrypted crossings.
+The target clock bridge is a synchronous-enable `BUFGCE`
+driven by the host MMCM. Progressive physical validation remains incomplete.
+Selected-card hardware preflight and guarded volatile programming of
+`0000:d8:00.0` completed successfully after rechecking the build inputs,
+all six firmware hashes, and 55 canonical firmware source files. XDMA
+automatically reloaded on PCIe rescan; both cards were bound with polling
+enabled, and the selected card resolved to XDMA instance 1. Permissions
+were restored. The repaired image's common FireSim fingerprint check passed
+(`0x46697265`); this is presence evidence, not design-specific identity.
+Descriptor firmware and both raw convolution regressions passed on the
+repaired image: two queued 1x1 jobs and two queued 3x3 jobs each matched
+their software references. This resolves the previously observed raw
+convolution timeout for these cases. The subsequent bounded DMA run did not
+record completion or a PASS. Slurm ended allocation `25641608` as
+`NODE_FAIL 1:0` at 12:44:45 UTC on October 10, with `idun-12-22`
+`DOWN+RESERVED+NOT_RESPONDING`. The saved DMA log contains only driver
+startup and "Commencing simulation"; there is no firmware result or timeout
+status. The node-failure cause is unknown, and this does not establish a DMA
+or storage fault. Double-buffer and generated-chain board tests were not
+reached. The watch was stopped on allocation loss; current volatile-image
+and driver state require revalidation after node recovery.
+The node subsequently recovered, with a boot time of 12:42:59 UTC and
+Slurm restart at 12:50:03 UTC. A new user-authorized, exclusive 30-minute
+recovery allocation (`25642252`) found both cards and shared filesystems
+accessible, XDMA polling enabled with no users, and the previous owned
+hardware-server PID absent. System journals and persistent crash records
+are not readable by the FPGA user's permitted commands; administrator
+evidence is needed to establish the reboot cause. Recovery is limited to
+restoring image provenance and repeating the previously passing checks,
+not blindly rerunning DMA.
+Within that recovery allocation, the selected JTAG identity, all five
+recorded build inputs, all six firmware hashes, and the repaired bitstream
+hash were rechecked. Volatile programming of only `0000:d8:00.0` completed
+with status 0. PCIe rescan automatically restored XDMA in polling mode;
+the selected card again resolved to instance 1. After restoring permissions,
+the common fingerprint, descriptor test, and both queued raw convolution
+tests passed again at 13:02 UTC. No DMA, double-buffer, or generated-chain
+workload was attempted during recovery.
+The boot ID remained unchanged through these checks. The owned hardware
+server binary and its two launcher processes were confirmed absent after
+cleanup, with localhost port 3121 free. Recovery allocation `25642252`
+completed with Slurm status `COMPLETED 0:0` at 13:03:50 UTC, after 10 minutes
+41 seconds, and the recovery watch was cleared. Full DMA/chain board
+validation remains blocked pending investigation of the earlier reboot.
+The separately authorized focused DMA retry used allocation `25642265` and
+an isolated firmware image that submitted only one aligned 16-byte
+DRAM-to-scratchpad transfer. Image provenance, the selected card, and the
+descriptor/1x1/3x3 baselines all passed again. The smoke driver reached
+FireSim startup and `Commencing simulation`, but never reached its first
+firmware checkpoint before Slurm reported `NODE_FAIL 1:0` for `idun-12-22`
+after 9 minutes 16 seconds. Its step and extern records were cancelled;
+there was no DMA PASS, status result, or firmware MMIO checkpoint. No
+additional retry was made. A later read-only node check showed a subsequent
+boot on October 12, but that does not establish the cause of the October 10
+failure.
+Timing figures for the earlier image do not establish correctness of this
+storage port.
+
+For an existing failed synthesis project, `scripts/resume-firesim-u250-vivado.tcl`
+loads `$CL_DIR/design/ne16-vivado.tcl`, verifies the U250 part, board, top, and
+60 MHz host clock, then reruns the stock `TIMING` synthesis/implementation
+flow. Preserve failure logs before using it, and only resume a task-owned
+project with matching current RTL/driver provenance. It does not bypass
+synthesis, implementation, or timing checks.
+
+For a completed task-owned project with the old primary-clock setting, append
+`--repair-host-clock` to its `-tclargs`. The script first verifies DDR0's UI
+clock wiring and snapshots the original bitstream, MCS, project, reports,
+block design, and host-clock IP configuration under
+`vivado_proj/pre_host_clock_repair_<SLURM_JOB_ID>`. It then regenerates the
+corrected clock IP and reruns synthesis/implementation; it does not simply
+delete a timing warning from the routed design. The normal resume path rejects
+the old setting.
+
+Run `scripts/review-firesim-u250-vivado.tcl` with `-tclargs "$CL_DIR"` through
+Slurm to regenerate verbose timing checks, methodology, clocks, clock
+interactions, exceptions, bus skew, unconstrained-path timing, and detailed CDC reports in
+`vivado_proj/review_<SLURM_JOB_ID>`. Review actual clock and reset endpoints,
+including vendor-scoped exceptions; zero failing setup/hold endpoints alone
+does not establish that the constraints are correct.
+The review requires a completed bitstream and nonnegative setup, hold, and
+pulse-width statistics. It also records the four FPGA storage module families
+in `ne16_storage.rpt` and requires the retained configuration, input-buffer,
+and accumulator hierarchies. The FIFO SCM can be absent from the optimized
+hierarchy; this is reported explicitly, and the primitive/clock checks still
+cover the entire mapped NE16. The review rejects mapped NE16 latches or active
+clock pins not driven by global clock buffers. Constant DSP clock pins are
+accepted only for verified direct combinational multiplier/cascade modes,
+with datapath/control pipelines disabled and unused C/D/AD enables tied low;
+other tied clocks are rejected.
+The review also saves `cdc_objects.rpt` with CDC violation properties,
+including startpoint and endpoint pins hidden in the formatted CDC report.
+Inspect these properties to establish crossing ownership and topology;
+successful report generation is not CDC acceptance.
+
+`scripts/audit-firesim-u250-constraints.tcl`, also run through Slurm with
+`-tclargs "$CL_DIR"`, records the host/DDR/PCIe clock properties, registers
+using the PCIe reference/internal clocks outside XDMA, and routed reset
+connectivity in `vivado_proj/constraint_audit_<SLURM_JOB_ID>`. Use this evidence
+with the vendor constraints and reset RTL; reset names alone do not justify
+ignoring missing I/O delays.
+
+On Idun, run builds through Slurm. Physical access uses partition `CPUQ`,
+account `share-ie-idi`, and reservation `fpga`; always specify
+`--nodes=1 --ntasks=1` and acquire an exclusive FPGA-node allocation before
+programming. Use the installed FPGA database and one explicit BDF. XDMA
+module removal/reloading affects both cards on the host. Do not invoke
+`firesim-remove-dev-shm`, which deletes all shared-memory objects, or blindly
+use the example FireSim deployment configurations.
+
+PCIe rescan can automatically reload XDMA. Check the actual module binding
+and `poll_mode=1` before invoking the non-idempotent load helper; an `insmod`
+"File exists" response does not mean programming failed. Restore the selected
+BDF's sysfs/device permissions after rescan, and resolve the XDMA instance
+from that BDF rather than assuming `/dev/xdma0` is the selected card.
+
+Before programming, start a task-owned hardware server only if port 3121 is
+unused, then run `scripts/firesim-u250-hardware-preflight.tcl` through the
+exclusive allocation with `-tclargs <target-UID>`. It requires exactly one
+matching JTAG target and one U250 device and prints
+`SELECTED_U250_TARGET_PRESENT`. A zero process exit without that evidence is
+not a successful device check.
+
+For bare-metal execution, give the ELF to the native driver's TSI/FESVR
+loader as a positional argument, with host options inside
+`+permissive ... +permissive-off`. Do not reuse Verilator's
+`+loadmem=<ELF>` convention: FireSim's generic memory-file initialization is a
+different path. The TSI bridge uses its load-memory widget to transfer ELF
+segments when available. Validate the descriptor/boot path before proceeding
+to convolution, DMA, double buffering, and the generated chain.
+
+When wrapping the driver in `timeout` inside an interactive subshell or loop,
+use `timeout --foreground`: the UART driver configures the controlling terminal,
+and a separate background process group can stop on `SIGTTOU` before producing
+any output. Run each firmware in its own log directory because the driver
+creates statistics files in its working directory.
+`tests/ne16-conv.c` reports accelerator status, CPU/NE16 scratchpad grant
+counters, input readback, and output sentinels on its existing timeout path
+to distinguish a dead interface from an incomplete accelerator transaction.
 
 ## Shared scratchpad arbitration
 

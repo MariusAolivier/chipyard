@@ -2,3 +2,16 @@ conda-reqs/conda-lock-reqs/conda-requirements-riscv-tools-linux-64-lean.conda-lo
 conda-reqs/conda-lock-reqs/conda-requirements-riscv-tools-linux-64.conda-lock.yml linguist-generated=true
 tests/ne16-dory-generated-layer/** -text
 tests/ne16-dory-generated-chain/** -text
+generators/ne16/scripts/firesim-u250-vivado-preflight.tcl text eol=lf
+generators/ne16/scripts/prepare-firesim-u250-vivado.sh text eol=lf
+generators/ne16/fpga/platform_env_2024.2.tcl text eol=lf
+generators/ne16/patches/firesim-u250-vivado-2024.2.patch text eol=lf
+generators/ne16/scripts/prepare-rtl.sh text eol=lf
+generators/ne16/scripts/resume-firesim-u250-vivado.tcl text eol=lf
+generators/ne16/scripts/review-firesim-u250-vivado.tcl text eol=lf
+generators/ne16/scripts/audit-firesim-u250-constraints.tcl text eol=lf
+generators/ne16/scripts/firesim-u250-hardware-preflight.tcl text eol=lf
+generators/ne16/fpga/ne16_storage.sv text eol=lf
+generators/ne16/scripts/test-fpga-storage.sh text eol=lf
+generators/ne16/tests/ne16-fpga-core-tb.sv text eol=lf
+generators/ne16/tests/ne16-fpga-storage-tb.sv text eol=lf

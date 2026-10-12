@@ -48,6 +48,21 @@ cmake --build ./build/ --target hello
 
 ## Generating disassembly of the tests
 
+`ne16-dma-smoke` is a focused NE16 DMA diagnostic. It prints unbuffered
+checkpoints and submits exactly one aligned 16-byte DRAM-to-scratchpad load,
+checking the data, all 48 surrounding guard bytes, DONE/error status,
+copied-byte count, and DMA grants. It performs no reverse transfer, queue
+test, ACK, reset, or automatic retry. On timeout it retains its static
+source buffer and reports that the engine may remain live.
+
+```bash
+cmake --build ./build/ --target ne16-dma-smoke
+```
+
+On FPGA, also line-buffer the host driver's output (for example with
+`stdbuf -oL -eL`) and use a bounded `timeout --foreground`. A user-space
+timeout cannot prevent a kernel failure or host reboot.
+
 To dump the disassembly of the tests, we can run the following command.
 
 ```bash

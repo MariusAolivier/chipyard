@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "ne16_driver.h"
+#include "ne16_dma.h"
 
 #define INPUT0_OFFSET 0x0000
 #define INPUT1_OFFSET 0x0400
@@ -75,7 +76,15 @@ int main(void) {
   }
 
   if (ne16_wait_idle(10000000) != 0) {
-    printf("NE16 timed out\n");
+    const uint32_t status = ne16_status();
+    const uint32_t cpu_grants =
+        *(volatile const uint32_t *)(NE16_DMA_BASE + NE16_DMA_CPU_GRANTS);
+    const uint32_t ne16_grants =
+        *(volatile const uint32_t *)(NE16_DMA_BASE + NE16_DMA_NE16_GRANTS);
+    printf("NE16 timed out: status=0x%08x CPU grants=%u NE16 grants=%u "
+           "input0=%u input1=%u output0=0x%08x output1=0x%08x\n",
+           status, cpu_grants, ne16_grants, input0[0], input1[0],
+           (uint32_t)output0[0], (uint32_t)output1[0]);
     return 1;
   }
 

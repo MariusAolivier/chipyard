@@ -97,6 +97,15 @@ add_executable(ne16-dma
 target_include_directories(ne16-dma BEFORE PRIVATE
     dory_ne16_compat
     ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable(ne16-dma-smoke
+    ne16-dma-smoke.c
+    ne16_driver.c
+    ne16_dma.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/dory_dma.c)
+target_include_directories(ne16-dma-smoke BEFORE PRIVATE
+    dory_ne16_compat
+    ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(ne16-dory-generated-tile
     ne16-dory-generated-tile.c
     ne16_driver.c
@@ -229,6 +238,7 @@ add_dump_target(triple-chiplet)
 add_dump_target(ne16-dory-generated-tile)
 add_dump_target(ne16-descriptor)
 add_dump_target(ne16-dma)
+add_dump_target(ne16-dma-smoke)
 add_dump_target(ne16-double-buffer)
 add_dump_target(ne16-dory-tiled-layer)
 add_dump_target(ne16-dory-generated-layer)

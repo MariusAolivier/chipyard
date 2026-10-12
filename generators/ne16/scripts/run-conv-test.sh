@@ -10,12 +10,13 @@ python3 "$ne16_root/scripts/test-import-dory-ne16-generated-tile.py"
 python3 "$ne16_root/scripts/test-dory-ne16-generated-layer.py"
 python3 "$ne16_root/scripts/test-dory-ne16-generated-chain.py"
 cmake -S tests -B tests/build -D CMAKE_BUILD_TYPE=Debug
-for test in ne16-descriptor ne16-dma ne16-double-buffer ne16-dory-tiled-layer ne16-dory-generated-layer ne16-dory-generated-chain ne16-dory-generated-tile ne16-conv ne16-conv3x3 ne16-dory-layer; do
+for test in ne16-descriptor ne16-dma-smoke ne16-dma ne16-double-buffer ne16-dory-tiled-layer ne16-dory-generated-layer ne16-dory-generated-chain ne16-dory-generated-tile ne16-conv ne16-conv3x3 ne16-dory-layer; do
   cmake --build tests/build --target "$test" --parallel "${JOBS:-2}"
 done
 
 for binary in \
   tests/build/ne16-descriptor.riscv \
+  tests/build/ne16-dma-smoke.riscv \
   tests/build/ne16-dma.riscv \
   tests/build/ne16-double-buffer.riscv \
   tests/build/ne16-dory-tiled-layer.riscv \
