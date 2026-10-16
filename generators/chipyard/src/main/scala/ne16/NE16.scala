@@ -16,8 +16,10 @@ case class NE16Params(
   controlAddress: BigInt = 0x10030000L,
   scratchpadAddress: BigInt = 0x20000000L,
   scratchpadBytes: Int = 64 * 1024,
-  dmaAddress: BigInt = 0x10031000L
+  dmaAddress: BigInt = 0x10031000L,
+  dmaBurstBytes: Int = 64
 ) {
+  require(dmaBurstBytes >= 8 && (dmaBurstBytes & (dmaBurstBytes - 1)) == 0)
   require(scratchpadBytes >= 4096)
   require((scratchpadBytes & (scratchpadBytes - 1)) == 0)
   require(scratchpadAddress + scratchpadBytes <= (BigInt(1) << 32))

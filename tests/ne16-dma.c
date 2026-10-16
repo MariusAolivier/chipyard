@@ -304,6 +304,10 @@ int main(void) {
       direct_geometry(ext, out, 1, 3, 37, 1, 1, 37, 37, 37, 37) != 0 ||
       direct_geometry(ext, out, 2, 5, 7, 4, 1, 17, 19, 80, 80) != 0 ||
       direct_geometry(ext, out, 3, 7, 5, 3, 3, 11, 13, 41, 47) != 0 ||
+      /* Full bursts, mixed head/burst/tail rows, misaligned scratch. */
+      direct_geometry(ext, out, 0, 0, 256, 1, 1, 256, 256, 256, 256) != 0 ||
+      direct_geometry(ext, out, 8, 8, 200, 2, 1, 216, 208, 432, 416) != 0 ||
+      direct_geometry(ext, out, 0, 4, 96, 1, 1, 96, 96, 96, 96) != 0 ||
       validation_tests(ext) != 0) return 1;
   memset(result, SENTINEL, sizeof(result));
   if (dory_queue_tests(ext, out) != 0) {

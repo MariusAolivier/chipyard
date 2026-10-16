@@ -31,6 +31,18 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
     val scratchpadResponse = Flipped(Decoupled(UInt(64.W)))
   })
 
+  // Largest burst every DRAM manager accepts for both Get and PutFull.
+  private val burstBytes = {
+    val dram = edge.manager.managers.filter(
+      _.address.exists(_.contains(BigInt(0x80000000L))))
+    (Seq(params.dmaBurstBytes) ++
+      dram.map(m => m.supportsGet.max min m.supportsPutFull.max)).min
+  }
+  require(burstBytes >= 8 && isPow2(burstBytes),
+    s"NE16 DMA needs at least 8-byte DRAM transfers, got $burstBytes")
+  private val maxLgSize = log2Ceil(burstBytes)
+  private val burstBeats = burstBytes / 8
+
   val (idle :: externalRead :: externalReadResponse :: localWrite ::
     localWriteResponse :: localRead :: localReadResponse :: externalWrite ::
     externalWriteResponse :: advance :: Nil) = Enum(10)
@@ -46,7 +58,11 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
   val row = Reg(UInt(32.W))
   val plane = Reg(UInt(32.W))
   val load = Reg(Bool())
-  val data = Reg(UInt(64.W))
+  // One burst of data: loads use entry 0 per beat, stores gather all beats.
+  val data = Reg(Vec(burstBeats, UInt(64.W)))
+  val beat = RegInit(0.U(log2Ceil(burstBeats + 1).W))
+  val acknowledged = RegInit(false.B)
+  val denied = RegInit(false.B)
   val done = RegInit(false.B)
   val error = RegInit(0.U(32.W))
   val bytesCopied = RegInit(0.U(32.W))
@@ -115,6 +131,7 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
       row := 0.U
       plane := 0.U
       load := destinationLocal
+      beat := 0.U
       state := Mux(destinationLocal, externalRead, localRead)
     }.otherwise {
       done := true.B
@@ -122,23 +139,30 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
     }
   }
 
-  // Use the largest naturally aligned transfer that fits both endpoints.
-  val lgSize = WireDefault(0.U(2.W))
-  for (size <- 1 to 3) {
-    when(remaining >= (1 << size).U &&
-        source(size - 1, 0) === 0.U &&
-        destination(size - 1, 0) === 0.U) {
-      lgSize := size.U
+  // Sub-beat chunks need both endpoints naturally aligned. Bursts need only
+  // the external address aligned to the burst; scratch beats are 8-aligned.
+  val externalAddress = Mux(load, source, destination)
+  val localAddress = Mux(load, destination, source)
+  val lgSize = WireDefault(0.U(log2Ceil(maxLgSize + 1).W))
+  for (size <- 1 to maxLgSize) {
+    val aligned = if (size <= 3) {
+      source(size - 1, 0) === 0.U && destination(size - 1, 0) === 0.U
+    } else {
+      externalAddress(size - 1, 0) === 0.U && localAddress(2, 0) === 0.U
     }
+    when(remaining >= (1 << size).U && aligned) { lgSize := size.U }
   }
-  val chunkBytes = 1.U(4.W) << lgSize
+  val chunkBytes = 1.U((maxLgSize + 1).W) << lgSize
+  val burst = lgSize >= 3.U
+  val lastBeat = Mux(burst, (chunkBytes >> 3) - 1.U, 0.U)
   val sourceShift = Cat(source(2, 0), 0.U(3.W))
   val destinationShift = Cat(destination(2, 0), 0.U(3.W))
-  val destinationMask = (((1.U(9.W) << chunkBytes) - 1.U) << destination(2, 0))(7, 0)
+  val smallBytes = 1.U(4.W) << lgSize(1, 0)
+  val destinationMask = Mux(burst, "hff".U(8.W),
+    (((1.U(9.W) << smallBytes) - 1.U) << destination(2, 0))(7, 0))
   val (_, get) = edge.Get(0.U, source, lgSize)
   val (_, put) = edge.Put(0.U, destination, lgSize,
-    (data << destinationShift)(63, 0))
-  val externalAddress = Mux(load, source, destination)
+    (data(beat) << destinationShift)(63, 0))
   val externalLegal = edge.manager.containsSafe(externalAddress) &&
     Mux(load,
       edge.manager.supportsGetSafe(source, lgSize),
@@ -146,8 +170,8 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
 
   io.memory.a.valid := (state === externalRead || state === externalWrite) && externalLegal
   io.memory.a.bits := Mux(state === externalRead, get, put)
-  io.memory.d.ready := state === externalRead || state === externalWrite ||
-    state === externalReadResponse || state === externalWriteResponse
+  io.memory.d.ready := state === externalReadResponse ||
+    state === externalWrite || state === externalWriteResponse
   io.memory.b.ready := true.B
   io.memory.c.valid := false.B
   io.memory.c.bits := DontCare
@@ -155,46 +179,78 @@ class NE16DMA(params: NE16Params, edge: TLEdgeOut) extends Module {
   io.memory.e.bits := DontCare
 
   io.scratchpad.valid := state === localRead || state === localWrite
-  io.scratchpad.bits.address := Mux(load, destination, source)
+  io.scratchpad.bits.address := localAddress + (beat << 3)
   io.scratchpad.bits.write := load
-  io.scratchpad.bits.data := (data << destinationShift)(63, 0)
+  io.scratchpad.bits.data := (data(0) << destinationShift)(63, 0)
   io.scratchpad.bits.mask := destinationMask
   io.scratchpadResponse.ready := state === localReadResponse || state === localWriteResponse
 
-  when((state === externalRead || state === externalWrite) && !externalLegal) {
+  val memoryFailed = io.memory.d.bits.denied || io.memory.d.bits.corrupt
+  def fail(code: UInt): Unit = {
     state := idle
     done := true.B
-    error := 3.U
+    error := code
   }
-  when(io.memory.a.fire) {
-    state := Mux(load, externalReadResponse, externalWriteResponse)
+
+  when((state === externalRead || state === externalWrite) && !externalLegal) {
+    fail(3.U)
   }
-  when(io.memory.d.fire) {
-    when(io.memory.d.bits.denied || io.memory.d.bits.corrupt) {
-      state := idle
-      done := true.B
-      error := 2.U
+
+  // Load: one Get, then each returned beat is written to the scratchpad.
+  when(io.memory.a.fire && load) {
+    state := externalReadResponse
+  }
+  when(io.memory.d.fire && load) {
+    when(memoryFailed || denied) {
+      // Consume the remaining beats so the bus is left idle.
+      denied := beat =/= lastBeat
+      beat := beat + 1.U
+      when(beat === lastBeat) { fail(2.U) }
     }.otherwise {
-      when(load) {
-        data := io.memory.d.bits.data >> sourceShift
-        state := localWrite
-      }.otherwise {
-        state := advance
-      }
+      data(0) := io.memory.d.bits.data >> sourceShift
+      state := localWrite
     }
   }
   when(io.scratchpad.fire) {
     state := Mux(load, localWriteResponse, localReadResponse)
   }
   when(io.scratchpadResponse.fire) {
+    val more = beat =/= lastBeat
     when(load) {
-      state := advance
+      state := Mux(more, externalReadResponse, advance)
     }.otherwise {
-      data := io.scratchpadResponse.bits >> sourceShift
-      state := externalWrite
+      data(beat) := io.scratchpadResponse.bits >> sourceShift
+      state := Mux(more, localRead, externalWrite)
     }
+    beat := Mux(more, beat + 1.U, 0.U)
   }
 
+  // Store: gather all beats, send them as one Put, then await its ack. The
+  // ack may arrive before the last beat; the burst is always completed.
+  val ackNow = io.memory.d.fire && !load
+  val ackFailed = denied || (ackNow && memoryFailed)
+  def finishStore(): Unit = {
+    when(ackFailed) { fail(2.U) }.otherwise { state := advance }
+  }
+  when(ackNow) {
+    acknowledged := true.B
+    when(memoryFailed) { denied := true.B }
+  }
+  when(io.memory.a.fire && !load) {
+    when(beat =/= lastBeat) {
+      beat := beat + 1.U
+    }.otherwise {
+      beat := 0.U
+      when(acknowledged || ackNow) { finishStore() }
+        .otherwise { state := externalWriteResponse }
+    }
+  }
+  when(state === externalWriteResponse && ackNow) { finishStore() }
+
+  when(state === idle || state === advance) {
+    acknowledged := false.B
+    denied := false.B
+  }
   when(state === advance) {
     bytesCopied := bytesCopied + chunkBytes
     when(remaining > chunkBytes) {
