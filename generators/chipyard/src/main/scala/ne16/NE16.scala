@@ -17,8 +17,10 @@ case class NE16Params(
   scratchpadAddress: BigInt = 0x20000000L,
   scratchpadBytes: Int = 64 * 1024,
   dmaAddress: BigInt = 0x10031000L,
-  dmaBurstBytes: Int = 64
+  dmaBurstBytes: Int = 64,
+  dmaOutstanding: Int = 4
 ) {
+  require(dmaOutstanding >= 1)
   require(dmaBurstBytes >= 8 && (dmaBurstBytes & (dmaBurstBytes - 1)) == 0)
   require(scratchpadBytes >= 4096)
   require((scratchpadBytes & (scratchpadBytes - 1)) == 0)
@@ -73,7 +75,7 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
     beatBytes = beatBytes,
     concurrency = 1)
   val dmaMemoryNode = TLClientNode(Seq(TLMasterPortParameters.v1(
-    Seq(TLMasterParameters.v1(name = "ne16-dma", sourceId = IdRange(0, 1))))))
+    Seq(TLMasterParameters.v1(name = "ne16-dma", sourceId = IdRange(0, params.dmaOutstanding))))))
 
   val controlNode = TLManagerNode(Seq(TLSlavePortParameters.v1(
     managers = Seq(TLSlaveParameters.v1(
@@ -217,6 +219,21 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
       when(storage.io.grants(1) && accelerator.io.busy_o) {
         dmaOverlap := dmaOverlap + 1.U
       }
+      // Free-running busy-cycle counters for profiling; they wrap at 2^32.
+      val dmaBusyCycles = RegInit(0.U(32.W))
+      val ne16BusyCycles = RegInit(0.U(32.W))
+      val bothBusyCycles = RegInit(0.U(32.W))
+      val commandCycles = RegInit(0.U(32.W))
+      when(dma.io.busy) { dmaBusyCycles := dmaBusyCycles + 1.U }
+      when(accelerator.io.busy_o) { ne16BusyCycles := ne16BusyCycles + 1.U }
+      when(dma.io.busy && accelerator.io.busy_o) {
+        bothBusyCycles := bothBusyCycles + 1.U
+      }
+      when(dma.io.command.fire) {
+        commandCycles := 0.U
+      }.elsewhen(dma.io.busy) {
+        commandCycles := commandCycles + 1.U
+      }
       dmaControlNode.regmap(
         0x00 -> Seq(RegField.w(32, commandWrite(_, _))),
         0x04 -> Seq(RegField.r(32, status)),
@@ -235,7 +252,11 @@ class NE16TL(params: NE16Params, beatBytes: Int)(implicit p: Parameters)
         0x3c -> Seq(RegField.r(32, grants(1))),
         0x40 -> Seq(RegField.r(32, grants(2))),
         0x44 -> Seq(RegField.r(32, contention)),
-        0x48 -> Seq(RegField.r(32, dmaOverlap)))
+        0x48 -> Seq(RegField.r(32, dmaOverlap)),
+        0x4c -> Seq(RegField.r(32, dmaBusyCycles)),
+        0x50 -> Seq(RegField.r(32, ne16BusyCycles)),
+        0x54 -> Seq(RegField.r(32, bothBusyCycles)),
+        0x58 -> Seq(RegField.r(32, commandCycles)))
     }
   }
 }

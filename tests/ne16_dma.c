@@ -62,6 +62,10 @@ int ne16_dma_counter_read(uint32_t offset, uint32_t *value) {
     case NE16_DMA_NE16_GRANTS:
     case NE16_DMA_CONTENTION:
     case NE16_DMA_NE16_OVERLAP:
+    case NE16_DMA_BUSY_CYCLES:
+    case NE16_DMA_NE16_BUSY_CYCLES:
+    case NE16_DMA_BOTH_BUSY_CYCLES:
+    case NE16_DMA_COMMAND_CYCLES:
       *value = read32(offset);
       return 0;
     default:

@@ -163,6 +163,30 @@ target_include_directories(ne16-dory-generated-layer BEFORE PRIVATE
 target_include_directories(ne16-dory-generated-layer SYSTEM PRIVATE
     ne16-dory-generated-layer/upstream/inc)
 target_compile_options(ne16-dory-generated-layer PRIVATE -include stdio.h)
+add_executable(ne16-dory-generated-layer-perf
+    ne16-dory-generated-layer-perf.c
+    ne16-perf-wrap.c
+    ne16_driver.c
+    ne16_dma.c
+    ne16-dory-generated-layer/dory_generated_layer.c
+    ne16-dory-generated-layer/dory_generated_layer_data.c
+    dory_ne16_compat/pulp_nnx.c
+    dory_ne16_compat/pulp_nnx_util.c
+    dory_ne16_compat/dory_dma.c
+    dory_ne16_compat/dory_pipeline.c
+    dory_ne16_compat/dory_tiled_layer.c)
+target_include_directories(ne16-dory-generated-layer-perf BEFORE PRIVATE
+    dory_ne16_compat
+    ne16-dory-generated-layer
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ne16-dory-generated-layer-perf SYSTEM PRIVATE
+    ne16-dory-generated-layer/upstream/inc)
+target_compile_options(ne16-dory-generated-layer-perf PRIVATE -include stdio.h)
+target_link_options(ne16-dory-generated-layer-perf PRIVATE
+    -Wl,--wrap=nnx_dispatch_task -Wl,--wrap=nnx_resolve_check
+    -Wl,--wrap=dma_transfer_enqueue_config -Wl,--wrap=dma_transfer_seal
+    -Wl,--wrap=dma_transfer_poll
+    -Wl,--wrap=ne16_dma_submit -Wl,--wrap=ne16_dma_poll)
 foreach(layer RANGE 0 1)
   set(chain_layer_dir ne16-dory-generated-chain/layer${layer})
   add_library(ne16-dory-chain-l${layer} OBJECT
